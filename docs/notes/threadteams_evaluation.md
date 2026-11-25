@@ -6,7 +6,7 @@ recommendation. Planning-time figures are in §5 of `.claude/plans/alloc-guarant
 
 ## The prototype
 
-Branch `eval/threadteams` (commits 573b5418 and 4e9b79aa, cut from `alloc-guarantees-2` at
+Branch `eval/threadteams` (commits 573b5418 to 35f07e97, cut from `alloc-guarantees-2` at
 `20fa87a0`; not for merging) has two pieces under `eval/`:
 
 - `BrambleThreadTeams`, a package of its own standing in for a `BrambleThreadTeamsExt`
@@ -47,8 +47,9 @@ Julia. Environment: a scratch copy of the workspace (`~/bramble-scratch/s52-tt`)
 to the #1284 stack: KernelAbstractions 0.10.8, ThreadTeams 2.0.0, Enzyme 0.13.221, Metal
 1.12.1, GPUArrays 12.1.1, LLVM 10.7.0, Polyester 0.7.19. All four policies were measured in
 it; none of the figures come from S5.1's `benchmark` environment. `gate_preflight.sh --timing`
-passed before the timing runs; the load and Metal runs started at a load average of 2.2
-(threshold 2).
+passed before the timing runs. The load and Metal runs started at a load average of 2.2
+(threshold 2). The idle-time runs started after a passing check, but the check after them
+failed (`suggestd`, a macOS daemon, at 99.6% CPU), so part of them ran beside it.
 
 Polyester and the prototype define the same methods, so they run in separate processes: the
 **poly** process has serial, threads (`CpuThreaded` on `Threads.@threads`) and batch
@@ -242,7 +243,9 @@ On the 51 rows under 50 µs under batch (`Δₕ!` excluded: it has no threaded p
 513 × 513 row moves with code placement, 287 to 1146 µs serially), tt-hooks / batch has
 median 1.02. Five rows are above 1.15: `divₕ!` and `curlₕ!` at 65 × 65 (1.60, 1.55; 2.2
 against 1.4 µs, the same under tt-threaded), `D₊ₓ!` at 65 × 65 (1.24), `D₋ᵧ!` and
-`v .= u + w` at 513 × 513 (1.21, 1.15). tt-threaded / threads has median 0.07 there: the
+`v .= u + w` at 513 × 513 (1.21, 1.15). Polyester rows under 50 µs have moved 8 to 19%
+between rebuilds of the same code, so the last three are within that noise; `divₕ!` and
+`curlₕ!` are not. tt-threaded / threads has median 0.07 there: the
 team's region costs what `@batch`'s does, and `Threads.@threads` costs 6 to 40 µs more. On
 the 31 longer rows the medians are 0.99 (tt-hooks / batch) and 0.83 (tt-threaded /
 threads).
@@ -270,45 +273,50 @@ throughout). The last column sets ThreadTeams' spin time to 2 ms
 
 | Path | Mesh | serial | threads | batch | tt-threaded | tt-hooks | tt-hooks, spin 2 ms |
 |---|---|---:|---:|---:|---:|---:|---:|
-| `D₋ₓ!` | 65² | 5.79 / 0.01 | 125 / 0.33 | 1.75 / 2.99 | 17.7 / 0.30 | 6.58 / 0.29 | 0.75 / 2.97 |
-| `D₋ₓ!` | 513² | 325 / 0.19 | 184 / 0.55 | 54.6 / 2.97 | 173 / 0.73 | 178 / 0.77 | 55 / 3.01 |
-| `Dcₓ!` | 65² | 1.88 / 0.00 | 129 / 0.33 | 0.75 / 2.95 | 20.5 / 0.29 | 8.88 / 0.29 | 0.875 / 2.96 |
-| `Dcₓ!` | 513² | 576 / 0.27 | 226 / 0.69 | 192 / 3.07 | 208 / 0.86 | 244 / 0.88 | 193 / 3.08 |
-| `divₕ!` | 65² | 13.7 / 0.02 | 222 / 0.54 | 10.9 / 2.94 | 31 / 0.45 | 29.8 / 0.44 | 11.5 / 2.94 |
-| `divₕ!` | 513² | 583 / 0.32 | 334 / 0.77 | 87.5 / 3.04 | 411 / 0.94 | 347 / 1.05 | 73.8 / 3.01 |
-| `v .= u + w` | 65² | 5.6 / 0.01 | 108 / 0.33 | 1.35 / 2.99 | 18.5 / 0.29 | 18.2 / 0.29 | 0.75 / 2.95 |
-| `v .= u + w` | 513² | 407 / 0.20 | 194 / 0.59 | 36 / 2.95 | 255 / 0.83 | 90.8 / 0.67 | 34.4 / 3.00 |
-| `innerₕ(u, w)` | 65² | 6.38 / 0.01 | 126 / 0.33 | 0.896 / 2.97 | 20.3 / 0.30 | 20 / 0.30 | 2.69 / 2.96 |
-| `innerₕ(u, w)` | 513² | 245 / 0.17 | 308 / 0.60 | 27.6 / 3.02 | 107 / 0.66 | 177 / 0.76 | 28.1 / 3.01 |
-| `assemble! bilinear` | 65² | 82.6 / 0.06 | 528 / 1.01 | 11.8 / 2.98 | 29.6 / 0.54 | 69.1 / 0.56 | 11 / 3.00 |
-| `assemble! bilinear` | 513² | 2361 / 0.61 | 1231 / 1.85 | 751 / 3.34 | 991 / 1.77 | 968 / 1.75 | 711 / 3.34 |
-| `jacobian!` | 65² | 151 / 0.12 | 600 / 1.19 | 34.4 / 2.98 | 100 / 0.69 | 97.6 / 0.68 | 34.9 / 3.01 |
-| `jacobian!` | 513² | 3410 / 0.70 | 2773 / 1.88 | 2282 / 3.61 | 2545 / 1.69 | 2605 / 1.68 | 2295 / 3.14 |
-| `mul! plain` | 65² | 31.4 / 0.03 | 55.8 / 0.27 | 3.46 / 2.99 | 11.1 / 0.29 | 45.4 / 0.35 | 3.33 / 2.98 |
-| `mul! plain` | 513² | 1343 / 0.48 | 427 / 0.80 | 138 / 3.06 | 229 / 0.79 | 512 / 1.35 | 138 / 3.03 |
-| `v_cycle!` | 65² | 291 / 1.10 | 1318 / 1.97 | 173 / 3.07 | 352 / 1.10 | 342 / 1.12 | 159 / 3.06 |
-| `v_cycle!` | 513² | 11559 / 1.12 | 8286 / 3.30 | 8733 / 4.11 | 5379 / 3.45 | 5234 / 3.47 | 5104 / 4.15 |
-| `explicit rhs(du, u)` | 65² | 27.2 / 0.03 | 147 / 0.33 | 8.67 / 2.97 | 74.7 / 0.32 | 21 / 0.54 | 8.35 / 2.97 |
-| `explicit rhs(du, u)` | 513² | 2111 / 0.58 | 1843 / 0.75 | 872 / 3.38 | 1409 / 0.81 | 1403 / 1.99 | 1077 / 3.39 |
+| `D₋ₓ!` | 65² | 6 / 0.01 | 131 / 0.34 | 0.666 / 2.98 | 18.1 / 0.30 | 16.7 / 0.29 | 0.75 / 2.96 |
+| `D₋ₓ!` | 513² | 342 / 0.21 | 302 / 0.61 | 67 / 3.00 | 173 / 0.75 | 188 / 0.78 | 54.8 / 3.01 |
+| `Dcₓ!` | 65² | 11.4 / 0.01 | 114 / 0.32 | 0.75 / 2.96 | 20.9 / 0.30 | 18.6 / 0.30 | 0.834 / 2.94 |
+| `Dcₓ!` | 513² | 2060 / 0.55 | 398 / 0.93 | 193 / 3.11 | 213 / 0.88 | 204 / 0.87 | 192 / 3.10 |
+| `divₕ!` | 65² | 13.8 / 0.02 | 226 / 0.52 | 7.98 / 2.92 | 31.1 / 0.45 | 7.08 / 0.43 | 9.6 / 2.87 |
+| `divₕ!` | 513² | 814 / 0.36 | 730 / 1.22 | 68.5 / 3.03 | 487 / 1.16 | 408 / 1.07 | 73.2 / 3.02 |
+| `v .= u + w` | 65² | 5.33 / 0.01 | 103 / 0.32 | 0.708 / 2.94 | 16.7 / 0.29 | 17.8 / 0.29 | 0.791 / 2.98 |
+| `v .= u + w` | 513² | 236 / 0.15 | 358 / 0.66 | 33 / 3.01 | 243 / 0.86 | 157 / 0.84 | 33.4 / 3.02 |
+| `innerₕ(u, w)` | 65² | 6.31 / 0.01 | 118 / 0.32 | 0.75 / 2.99 | 20 / 0.29 | 20 / 0.30 | 0.834 / 2.96 |
+| `innerₕ(u, w)` | 513² | 140 / 0.10 | 311 / 0.61 | 27.8 / 2.99 | 166 / 0.72 | 191 / 0.84 | 92 / 3.03 |
+| `assemble! bilinear` | 65² | 92.1 / 0.07 | 315 / 0.82 | 12 / 2.98 | 68.7 / 0.56 | 64.6 / 0.55 | 28.3 / 2.98 |
+| `assemble! bilinear` | 513² | 2519 / 0.63 | 1402 / 1.95 | 702 / 3.33 | 1091 / 1.78 | 1091 / 1.79 | 723 / 3.32 |
+| `jacobian!` | 65² | 120 / 0.08 | 787 / 1.31 | 34 / 3.00 | 107 / 0.69 | 58.9 / 0.67 | 117 / 3.02 |
+| `jacobian!` | 513² | 3404 / 0.69 | 2702 / 1.87 | 2280 / 3.60 | 2557 / 1.70 | 2585 / 1.67 | 2268 / 3.18 |
+| `mul! plain` | 65² | 31.5 / 0.03 | 61.4 / 0.26 | 3.48 / 2.96 | 46.1 / 0.34 | 44.5 / 0.32 | 3.33 / 2.95 |
+| `mul! plain` | 513² | 651 / 0.32 | 583 / 0.95 | 301 / 3.12 | 292 / 1.02 | 479 / 1.28 | 139 / 3.07 |
+| `v_cycle!` | 65² | 378 / 1.12 | 1196 / 1.81 | 173 / 3.10 | 335 / 1.04 | 302 / 0.98 | 158 / 3.07 |
+| `v_cycle!` | 513² | 11253 / 1.13 | 7952 / 3.39 | 8289 / 4.13 | 5189 / 3.44 | 5378 / 3.46 | 6236 / 4.17 |
+| `explicit rhs(du, u)` | 65² | 73 / 0.05 | 184 / 0.36 | 9 / 2.99 | 76.1 / 0.32 | 58.7 / 0.57 | 8.33 / 2.98 |
+| `explicit rhs(du, u)` | 513² | 2178 / 0.58 | 2344 / 0.77 | 740 / 3.33 | 2225 / 0.83 | 951 / 1.75 | 785 / 3.32 |
 
 After a gap longer than its 100 µs spin the team is asleep, and short calls slow down: the
-65 × 65 stencil, broadcast and reduction rows take 6.6 to 31 µs where batch takes 0.75 to
-11 µs, still a fifth or less of `Threads.@threads`. Polyester does not sleep through a 1 ms
-gap: its CPU time is 2.9 to 4.1 times the wall time on every row of the table, three cores spinning for a
-caller that runs on one. With a 2 ms spin the team is within 1.17 of batch on 18 of the 20
-rows (`innerₕ(u, w)` at 65 × 65 is the exception at 2.7 against 0.9 µs, and the explicit
-right-hand side at 513 × 513 at 1077 against 872 µs) and costs the same CPU. In the second
-after the last call, batch used 45 ms of CPU time (median over all rows, at most 60 ms), the
-team 0.85 ms (at most 7.7 ms), `Threads.@threads` 0.13 ms. Part of the slowdown is the
-machine: serial calls after the gap take up to twice their back-to-back time too (`D₋ₓ!`
-at 513 × 513, 325 against 200 µs), so idle cores clock down.
+65 × 65 stencil, broadcast and reduction rows take 7 to 20 µs where batch takes 0.67 to 8 µs,
+still a sixth or less of `Threads.@threads`. Polyester does not sleep through a 1 ms gap: its
+CPU time is 2.9 to 4.1 times the wall time on every row of the table, three cores spinning
+for a caller that runs on one. With a 2 ms spin the team is within 1.17 of batch on 16 of the
+20 rows and costs the same CPU (2.9 to 4.2). The other four are 1.2 to 3.4 times batch
+(`jacobian!` and `assemble!` at 65 × 65, `innerₕ(u, w)` at 513 × 513, `divₕ!` at 65 × 65).
+In an earlier run of this column on a busier machine a different row (`innerₕ(u, w)` at
+65 × 65, 3.0) was the outlier, so these single runs of 200 calls vary by row. In the second
+after the last call, batch used 46 ms of CPU time (median over the rows, at most 61 ms), the
+team 0.85 ms (at most 4.9 ms), `Threads.@threads` 0.10 ms. Part of the slowdown is the
+machine: serial calls after the gap take up to 1.7 times their back-to-back time too
+(`D₋ₓ!` at 513 × 513, 342 against 200 µs), so idle cores clock down.
 
 ## Gradients
 
 `eval/enzyme_tt_driver.jl` runs each case of `test/ext/enzyme_policy_cases.jl` (`CASES`
 and `CAPTURES`, 29 cases) in a process of its own, under `CpuPolyester` on the team, with
-Polyester not loaded: each child asserts `BrambleEnzymePolyesterExt` is absent, so the only
-rules between Enzyme and the team are ThreadTeams' own. Modes: Enzyme reverse called
+Polyester not loaded: each child asserts `BrambleEnzymePolyesterExt` is absent.
+`BrambleEnzymeExt` is loaded, and its `CpuThreaded` rules count their entries
+(`_ENTRIES`, `ext/BrambleEnzymeExt/threaded.jl:80`). A second run of the 17 passing cases in
+reverse mode recorded 0 entries on every case, so none of Bramble's threaded rules took
+part. Modes: Enzyme reverse called
 directly, reverse through DifferentiationInterface, and forward through DI. Each is compared
 with ForwardDiff under the same policy (tolerance 1e-10). That oracle is itself within
 2.8e-16 of ForwardDiff under `CpuSerial` on every case. Cells give the relative error.
@@ -347,6 +355,9 @@ with ForwardDiff under the same policy (tolerance 1e-10). That oracle is itself 
 
 - 15 of 29 cases pass all three modes, and the two reductions pass both reverse modes: 13
   of the 17 hooks differentiate without one of Bramble's hand-written rules.
+- `_batch_kron_scaled` passes while `_batch_kron_lines!` fails, though the case table names
+  the same hook for both. Whether the scaled operator reaches that hook was not checked, so
+  its pass is not counted for the hook.
 - "batched reduction": DI's forward gradient pushes several tangents at once, and
   ThreadTeams' `run_fold` rule throws "batched differentiation of reductions is not
   supported".
@@ -355,7 +366,8 @@ with ForwardDiff under the same policy (tolerance 1e-10). That oracle is itself 
   for which `src/` passes Bramble's kernels behind a `Ref` to Bramble's own rules. That the same
   `Ref` would fix it here is a guess, not tested.
 - "crash": the child process died of a segmentation fault inside LLVM's dead-code elimination
-  (`AggressiveDeadCodeElimination::markLive`) while Enzyme compiled the case.
+  (`AggressiveDeadCodeElimination::markLive`) while Enzyme compiled the case. Each of the
+  three crashed the same way on a second run.
 
 Under `CpuThreaded` on the team (`S52_AD_POLICY=CpuThreaded`, with `threaded_on_teams.jl`
 included and Bramble's `BrambleEnzymeExt` rules in force), the 9 `THREADED` cases pass all
@@ -420,33 +432,59 @@ policy would leave three bodies where there are now two. Making ThreadTeams a ha
 rather than an extension under which `CpuThreaded` would fall back to `Threads.@threads`, is
 what lets one body serve the policy. That changes `Project.toml`, so it is the user's call.
 
-Outline of the follow-up plan:
+Outline of the follow-up plan, as subplans. 1 to 4 run in order (1 and 2 share files); 5 is a
+plan of its own, later.
 
-1. `CpuThreaded` on the team. OWNS `Project.toml` (ThreadTeams 2 in `[deps]` and
-   `[compat]`), `src/utils/linear_algebra.jl`, `src/assembly/bilinear_execution.jl`,
-   `src/assembly/matrix_free.jl`, `src/assembly/ghost_matrix_free.jl`. The seven
-   `Threads.@threads` runners and the two `@spawn` sites call one `run_chunks` helper, as
-   `eval/threaded_on_teams.jl` does. CHECK: no `Threads.@threads` or `Threads.@spawn` left in
-   `src/` outside comments, EXPECT 0; the `CpuThreaded` test files and
-   `test/ext/enzyme_threaded_ext.jl` green. WHY: one body for the policy; rejected keeping
-   `@threads` beside the team behind an extension, which keeps both bodies.
-2. `CpuThreaded` at 0 B. OWNS the three `src/` sites the bytes section names. `_threaded_dot`
-   and its masked and separable forms fold with `run_fold` instead of a partials vector, and
-   the `Ref(bc)` and the argument tuple stop escaping. CHECK `benchmark/cputhreaded_bytes.jl`,
-   EXPECT every row 0. This changes S5.3: its docstring would state 0 B rather than a bound.
-   WHY: the bytes are `src/`'s, not the team's; rejected documenting 96 to 832 B as the bound.
-3. Spin time. Either leave ThreadTeams' 100 µs default (the team sleeps through a gap, and a
-   short call then takes 6 to 30 µs) or document `ThreadTeams.set_spin_time!` for callers with
-   short gaps (it matches `@batch`, at `@batch`'s CPU cost). A paragraph in the `CpuThreaded`
-   docstring, no code. WHY: the trade-off is measured and the choice is the user's; rejected a
-   longer default, which spends three cores for every caller.
-4. Prune `ext/BrambleEnzymeExt/threaded.jl`. Delete its rules one runner at a time and rerun
-   the `THREADED` Enzyme cases with only ThreadTeams' rules. CHECK the cases, EXPECT all
-   modes ok; keep each rule whose deletion fails a case. WHY: pruning by measurement; rejected
-   deleting the 1022 lines at once, since some closure shapes fail on `CpuPolyester`'s hooks.
-5. Later, in a plan of its own: `CpuPolyester` on the same team. It waits on the
-   calling-convention failures (a `Ref` around the chunk closure is the untested guess),
-   ThreadTeams' rule for batched `run_fold` (an upstream issue, filed only on the user's yes),
-   and the three Enzyme compile crashes. Then `CpuPolyester` runs the `CpuThreaded` bodies,
-   and `ext/BramblePolyesterExt.jl` (1411 lines), `src/utils/batch_split.jl` (293) and
-   `ext/BrambleEnzymePolyesterExt/` (2956) can go.
+```
+F1  CpuThreaded on the team
+    OWNS:    Project.toml, Manifest.toml, src/utils/linear_algebra.jl,
+             src/assembly/bilinear_execution.jl, src/assembly/matrix_free.jl,
+             src/assembly/ghost_matrix_free.jl
+    CHECK:   grep -rE '^\s*Threads\.@(threads|spawn)' src | wc -l
+    EXPECT:  0            (9 today)
+    TESTS:   the CpuThreaded test files, test/ext/enzyme_threaded_ext.jl, quality
+    WORKER:  opus-medium
+    WHY:     The seven @threads runners and two @spawn sites call one run_chunks helper, as
+             eval/threaded_on_teams.jl does, with ThreadTeams 2 in [deps]. Rejected: an
+             extension under which CpuThreaded falls back to @threads, which keeps both bodies.
+
+F2  CpuThreaded allocates 0 B          DEPENDS: F1
+    OWNS:    src/utils/linear_algebra.jl, src/space/inner_product.jl,
+             src/space/vectorelement.jl, src/operators/vector_calculus.jl
+    CHECK:   julia --startup-file=no --threads=4 --project=benchmark \
+                 benchmark/cputhreaded_bytes.jl | grep -v calibration \
+                 | awk -F'|' 'NR > 2 && $5 + 0 > 0' | wc -l
+    EXPECT:  0
+    WORKER:  opus-medium
+    WHY:     The 9 paths left allocate in src/ (the partials vector of _threaded_dot, the
+             Ref(bc) of _static_broadcast_ref!, _run_bands!'s argument tuples); run_fold and
+             by-value captures remove them. Rejected: documenting 96 to 832 B as the bound.
+             S5.3 then states 0 B instead of a bound.
+
+F3  Spin time in the CpuThreaded docstring          DEPENDS: F1
+    OWNS:    src/utils/backend.jl
+    CHECK:   grep -c 'set_spin_time!' src/utils/backend.jl
+    EXPECT:  1
+    WORKER:  sonnet-medium
+    WHY:     After a gap past ThreadTeams' 100 µs spin a short call takes 7 to 20 µs; a 2 ms
+             spin brings @batch's times and its three busy cores. The docstring says so and
+             names ThreadTeams.set_spin_time!. Rejected: a longer default spin, which spends
+             three cores for every caller.
+
+F4  Prune the CpuThreaded Enzyme rules          DEPENDS: F1
+    OWNS:    ext/BrambleEnzymeExt/threaded.jl
+    CHECK:   wc -l < ext/BrambleEnzymeExt/threaded.jl
+    EXPECT:  below 1022, with test/ext/enzyme_threaded_ext.jl and the THREADED cases of
+             test/ext/enzyme_policy_cases.jl green
+    WORKER:  opus-high
+    WHY:     Delete the rules one runner at a time and keep each whose deletion fails a case,
+             so ThreadTeams' rules carry what they can. Rejected: deleting the file at once,
+             since 4 of the 17 CpuPolyester hooks fail on ThreadTeams' rules here.
+
+F5  (own plan, later) CpuPolyester on the same team
+    Waits on: the calling-convention failures (a Ref around the chunk closure is the
+    untested guess), ThreadTeams' rule for batched run_fold (an upstream issue, filed only
+    on the user's yes) and the three Enzyme compile crashes. Then CpuPolyester runs the
+    CpuThreaded bodies, and ext/BramblePolyesterExt.jl (1411 lines),
+    src/utils/batch_split.jl (293) and ext/BrambleEnzymePolyesterExt/ (2956) can go.
+```
