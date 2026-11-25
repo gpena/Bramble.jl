@@ -465,7 +465,8 @@ end
 
 function ldiv!(y::AbstractVector, P::GMGPreconditioner, x::AbstractVector)
     n = first(size(P))
-    (length(x) == n && length(y) == n) || _throw_gmg_dimmismatch(:ldiv!, P, y, x)
+    (length(x) == n && length(y) == n) ||
+        _throw_dimmismatch(P, y, x, "got vectors of length", "and", "ldiv!: ")
     _ldiv_by_parts(P, y, x) && return _ldiv_by_parts!(y, P, x)
     yd, xd = _mf_data(y), _mf_data(x)
     Base.require_one_based_indexing(yd, xd)
@@ -487,20 +488,12 @@ ldiv!(P::GMGPreconditioner, x::AbstractVector) = ldiv!(x, P, x)
 # and aliasing are checked.
 @inline function _gmg_cycle_data(fname, P, x, b)
     n = first(size(P))
-    (length(x) == n && length(b) == n) || _throw_gmg_dimmismatch(fname, P, x, b)
+    (length(x) == n && length(b) == n) ||
+        _throw_dimmismatch(P, x, b, "got vectors of length", "and", "$fname: ")
     xd, bd = _mf_data(x), _mf_data(b)
     Base.require_one_based_indexing(xd, bd)
     Base.mightalias(xd, bd) && throw(ArgumentError("$fname: x and b must not alias"))
     return xd, bd
-end
-
-@noinline function _throw_gmg_dimmismatch(fname, P, x, b)
-    throw(
-        DimensionMismatch(
-        "$fname: GMGPreconditioner of size $(size(P)) got vectors of length $(length(x)) " *
-        "and $(length(b))",
-    ),
-    )
 end
 
 # One cycle on level `l` for `A_l x = b` from the iterate `x`, with `γ` coarse cycles per
