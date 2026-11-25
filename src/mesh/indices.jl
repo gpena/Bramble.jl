@@ -18,6 +18,8 @@
     is_boundary_index(Ωₕ::AbstractMeshType, idx) -> Bool
 
 Determine whether index `idx` lies on the boundary of `idxs` or mesh `Ωₕ`.
+
+An axis of length 1 is skipped: a point on it is not a boundary point for that axis. [`boundary_indices`](@ref) does not skip it, so it returns the facets of such an axis too.
 """
 function is_boundary_index(idxs::CartesianIndices{D}, idx) where {D}
     _idx = CartesianIndex(idx)
@@ -35,6 +37,8 @@ end
     boundary_indices(Ωₕ::AbstractMeshType{D}) -> NTuple{2D, CartesianIndices{D}}
 
 Return all boundary facets of a `CartesianIndices` domain or mesh `Ωₕ` as a tuple of `CartesianIndices`.
+
+Unlike [`is_boundary_index`](@ref), a length-1 axis is not skipped: its two facets are the whole axis, so each facet covers every point along it.
 """
 @inline function boundary_indices(idxs::CartesianIndices{1})
     N = length(idxs)

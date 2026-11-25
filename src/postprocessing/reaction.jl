@@ -356,8 +356,22 @@ function _reaction_residual!(
     return scratch
 end
 
+@noinline function _throw_both_components()
+    throw(
+        ArgumentError(
+            "pass either `components` or its alias `dirichlet_components`, not both"
+        )
+    )
+end
+
+@inline function _reaction_components(components, dirichlet_components)
+    dirichlet_components === nothing && return components
+    components === nothing || _throw_both_components()
+    return dirichlet_components
+end
+
 """
-    reaction(A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement; marker, components = nothing) -> Real
+    reaction(A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement; marker, components = nothing, dirichlet_components = nothing) -> Real
 
 Net flux through the region(s) named by `marker`, from the **unconstrained** operator `A`
 and load `F` (`assemble(a)`/`assemble(l)` with no `dirichlet` keyword -- `dirichlet_bc!`
@@ -366,7 +380,8 @@ would have already overwritten the rows this needs).
 `marker` is a `Symbol` or a `Tuple` of them, exactly as `dirichlet` accepts one or several
 labels; overlap between markers is counted once (the same union `dirichlet_bc!` takes).
 `components` restricts a composite space's leaves (1-based positions in
-`leaf_spaces_offsets`, `nothing` meaning every leaf). A `uₕ` on a ghost space, or on a
+`leaf_spaces_offsets`, `nothing` meaning every leaf). `dirichlet_components` is an alias,
+the name `assemble` uses; passing both throws `ArgumentError`. A `uₕ` on a ghost space, or on a
 composite of them, throws `ArgumentError`: the relations have replaced its marked rows.
 
 # Sign and scaling
@@ -399,8 +414,9 @@ See also: [`reaction_density`](@ref), [`assemble`](@ref), [`normal_vector`](@ref
 """
 function reaction(
         A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;
-        marker, components = nothing
+        marker, components = nothing, dirichlet_components = nothing
 )
+    components = _reaction_components(components, dirichlet_components)
     _check_reaction_space(space(uₕ))
     _validate_reaction_sizes(A, F, uₕ)
     sp = space(uₕ)
@@ -413,20 +429,21 @@ function reaction(
 end
 
 """
-    reaction(a::BilinearForm, l::LinearForm, uₕ::VectorElement; marker, dirichlet_components = nothing) -> Real
+    reaction(a::BilinearForm, l::LinearForm, uₕ::VectorElement; marker, components = nothing, dirichlet_components = nothing) -> Real
 
 Reassembles the unconstrained `a`/`l` (`assemble` with no `dirichlet` keyword) and calls
-[`reaction`](@ref)`(A, F, uₕ; marker, components = dirichlet_components)`. `a` and `l` must
-be posed on the same space as `uₕ`.
+[`reaction`](@ref)`(A, F, uₕ; marker, components)`. Takes `components` or its alias
+`dirichlet_components`, not both. `a` and `l` must be posed on the same space as `uₕ`.
 """
 function reaction(
         a::BilinearForm, l::LinearForm, uₕ::VectorElement;
-        marker, dirichlet_components = nothing
+        marker, components = nothing, dirichlet_components = nothing
 )
+    components = _reaction_components(components, dirichlet_components)
     _validate_reaction_spaces(a, l, uₕ)
     A = assemble(a)
     F = assemble(l)
-    return reaction(A, F, uₕ; marker = marker, components = dirichlet_components)
+    return reaction(A, F, uₕ; marker = marker, components = components)
 end
 
 """
@@ -491,7 +508,7 @@ end
 end
 
 """
-    reaction_density(A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement; marker, components = nothing) -> VectorElement
+    reaction_density(A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement; marker, components = nothing, dirichlet_components = nothing) -> VectorElement
 
 The pointwise counterpart of [`reaction`](@ref): a grid function, zero away from `marker`,
 equal at each marked point to the boundary flux density `q·n` there, which converges
@@ -511,8 +528,9 @@ still gives its net flux.
 """
 function reaction_density(
         A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;
-        marker, components = nothing
+        marker, components = nothing, dirichlet_components = nothing
 )
+    components = _reaction_components(components, dirichlet_components)
     # `reaction_density!` writes only the marked entries, so `dens` starts at zero.
     dens = zeros(promote_type(eltype(A), eltype(parent(uₕ)), eltype(F)), ndofs(space(uₕ)))
     reaction_density!(dens, A, F, uₕ; marker = marker, components = components)
@@ -520,19 +538,20 @@ function reaction_density(
 end
 
 """
-    reaction_density(a::BilinearForm, l::LinearForm, uₕ::VectorElement; marker, dirichlet_components = nothing) -> VectorElement
+    reaction_density(a::BilinearForm, l::LinearForm, uₕ::VectorElement; marker, components = nothing, dirichlet_components = nothing) -> VectorElement
 
 Reassembles the unconstrained `a`/`l` and calls [`reaction_density`](@ref)`(A, F, uₕ;
-marker, components = dirichlet_components)`.
+marker, components)`. Takes `components` or its alias `dirichlet_components`, not both.
 """
 function reaction_density(
         a::BilinearForm, l::LinearForm, uₕ::VectorElement;
-        marker, dirichlet_components = nothing
+        marker, components = nothing, dirichlet_components = nothing
 )
+    components = _reaction_components(components, dirichlet_components)
     _validate_reaction_spaces(a, l, uₕ)
     A = assemble(a)
     F = assemble(l)
-    return reaction_density(A, F, uₕ; marker = marker, components = dirichlet_components)
+    return reaction_density(A, F, uₕ; marker = marker, components = components)
 end
 
 """

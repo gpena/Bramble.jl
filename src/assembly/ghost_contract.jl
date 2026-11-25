@@ -186,7 +186,7 @@ Pose `a` and `l` on the plain space `gridspace(Ωₕ)`, fill an element of it wi
 physical values of `Bramble.lift(C, u)`, and call [`reaction`](@ref) there.
 """
 function reaction(::GhostBilinearForm, ::GhostLinearForm, ::VectorElement;
-        marker, dirichlet_components = nothing)
+        marker, components = nothing, dirichlet_components = nothing)
     return _throw_ghost_reaction()
 end
 

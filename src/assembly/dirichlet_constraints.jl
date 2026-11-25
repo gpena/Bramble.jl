@@ -31,9 +31,9 @@ constraints (`EvaluatedDomainMarkers`).
 const ConstraintMarkers = Union{DomainMarkers, EvaluatedDomainMarkers}
 
 """
-    dirichlet_constraints(input, [I::CartesianProduct{1}], pairs::Pair...) -> DomainMarkers
+    dirichlet_constraints(input, [I::CartesianProduct{1}], pairs::Pair...) -> DirichletConstraint
 
-Create Dirichlet boundary constraints.
+Create Dirichlet boundary constraints, returned as a `DirichletConstraint` (the public name of the internal `DomainMarkers` type).
 
 Each `pair` is of the form `:label => func`, where `:label` identifies the boundary region and `func` defines the Dirichlet values. If the optional time domain `I` is provided, `func` must be a time-dependent function `func(x, t)`, or a time- and parameter-dependent one `func(x, t, p)` for a value that a [`semidiscretize`](@ref) residual's own `p` should reach; this is checked by arity, since nothing about `func` itself can be evaluated at construction time. The time-dependent pairs given alongside `I` must agree on which of the two shapes they use, and at least one pair must be time-dependent. A pair whose `func` takes `x` alone may stay beside them: it is kept as it is at every `t`, as [`semidiscretize`](@ref) and the `dirichlet` keyword do.
 
@@ -193,7 +193,7 @@ end
 #===========================================================================#
 
 """
-    dirichlet_constraints(X::CartesianProduct, f::Function) -> DomainMarkers
+    dirichlet_constraints(X::CartesianProduct, f::Function) -> DirichletConstraint
 
 Create a single Dirichlet boundary constraint with function `f` under the `:boundary` label.
 """

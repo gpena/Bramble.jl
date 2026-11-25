@@ -15,7 +15,7 @@ using ForwardDiff: ForwardDiff
 using DifferentiationInterface: AutoForwardDiff
 import DifferentiationInterface as DI
 using FiniteDiff: FiniteDiff
-using SciMLBase: solve
+using SciMLBase: SciMLBase, solve
 using OrdinaryDiffEqBDF: FBDF
 
 using ..TestUtils: ghost_mesh
@@ -400,6 +400,19 @@ end
         prob = ode_problem(a, l, zeros(Bramble.ndofs(C)), (0.0, 1.0); mass = m)
         @test prob.f.mass_matrix == assemble(m)
         @test prob.f.mass_matrix != Bramble.mass_matrix(semidiscretize(a, l))
+    end
+
+    # `ode_function` takes the ghost pair as `ode_problem` does, and forwards `mass` too.
+    @testset "ode_function on the ghost pair" begin
+        W = gridspace(ghost_mesh(CpuSerial(), (6, 7)); ghosts = GHOSTS2)
+        C = constrained(W, rel2(nothing))
+        a, l = form(C, C, laplacian), form(C, source)
+        m = form(C, C, (u, v) -> 3.0 * innerₕ(u, v))
+        f = Bramble.ode_function(a, l; mass = m)
+        @test f isa SciMLBase.ODEFunction
+        @test f.mass_matrix == assemble(m)
+        g = Bramble.ode_function(semidiscretize(a, l; mass = m))
+        @test f.mass_matrix == g.mass_matrix
     end
 
     @testset "Refusals" begin
