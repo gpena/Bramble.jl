@@ -1761,10 +1761,6 @@ end
 # one fails loudly at its first scalar read rather than assembling wrong numbers.
 @inline _host_sources(op) = op
 
-@inline _host_array(x) = x
-@inline _host_array(v::AbstractArray) = _host_array(locality(typeof(v)), v)
-@inline _host_array(::HostLocality, v::AbstractArray) = v
-@inline _host_array(::DeviceLocality, v::AbstractArray) = Array(v)
 # A host `VectorElement` stays itself, so a bilinear walk binding it (`stencil_eval.jl`)
 # keeps its type and copies nothing; only device storage is copied, to a plain `Vector`.
 @inline _host_array(v::VectorElement) = _host_array(locality(typeof(parent(v))), v)

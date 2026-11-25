@@ -1180,7 +1180,8 @@ function _bind_interp_spaces(op::OperatorScale{D}, trial_leaf, test_leaf) where 
 end
 
 # A coefficient in device storage is read one point at a time by `local_stencil`, which the
-# device refuses, so binding swaps it for a host copy (`_host_array`, `linear.jl`;
+# device refuses, so binding swaps it for a host copy (`_host_array`, `utils/device_kernels.jl`
+# and, for a `VectorElement`, `assembly/linear.jl`;
 # gpena/Bramble.jl#364). Every walk of every fill binds its term afresh (the same sites take
 # the walked leaf's `host_weights`), so the copy is new each time and `assemble!` sees a
 # coefficient changed on the device since the last call; it is never cached in the form, and

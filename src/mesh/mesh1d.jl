@@ -287,10 +287,7 @@ no copy -- `host_points(Ωₕ) === points(Ωₕ)`; only a device-backed mesh pay
 
 See also: [`host_spacings`](@ref), [`points`](@ref), [`point`](@ref).
 """
-@inline host_points(Ωₕ::_Mesh1DLike) = _host_points(locality(typeof(points(Ωₕ))), Ωₕ)
-
-@inline _host_points(::HostLocality, Ωₕ::_Mesh1DLike) = points(Ωₕ)
-@inline _host_points(::DeviceLocality, Ωₕ::_Mesh1DLike) = Array(points(Ωₕ))
+@inline host_points(Ωₕ::_Mesh1DLike) = _host_array(points(Ωₕ))
 
 """
     locate_cell(Ωₕ::Mesh1D, x::Real) -> Int
@@ -428,10 +425,7 @@ no copy; only a device-backed mesh pays the one bulk `Array(...)` transfer.
 
 See also: [`spacings`](@ref), [`spacing`](@ref), [`forward_spacing`](@ref).
 """
-@inline host_spacings(Ωₕ::_Mesh1DLike) = _host_spacings(locality(typeof(spacings(Ωₕ))), Ωₕ)
-
-@inline _host_spacings(::HostLocality, Ωₕ::_Mesh1DLike) = spacings(Ωₕ)
-@inline _host_spacings(::DeviceLocality, Ωₕ::_Mesh1DLike) = Array(spacings(Ωₕ))
+@inline host_spacings(Ωₕ::_Mesh1DLike) = _host_array(spacings(Ωₕ))
 
 """
     host_half_spacings(Ωₕ::Mesh1D) -> Vector
@@ -445,10 +439,7 @@ directly with no copy; only a device-backed mesh pays the one bulk `Array(...)` 
 
 See also: [`host_spacings`](@ref), [`half_spacings`](@ref), [`half_spacing`](@ref).
 """
-@inline host_half_spacings(Ωₕ::_Mesh1DLike) = _host_half_spacings(locality(typeof(half_spacings(Ωₕ))), Ωₕ)
-
-@inline _host_half_spacings(::HostLocality, Ωₕ::_Mesh1DLike) = half_spacings(Ωₕ)
-@inline _host_half_spacings(::DeviceLocality, Ωₕ::_Mesh1DLike) = Array(half_spacings(Ωₕ))
+@inline host_half_spacings(Ωₕ::_Mesh1DLike) = _host_array(half_spacings(Ωₕ))
 
 # A one-point mesh's raw half-spacing is zero, which collapse detection reads. As a measure
 # it is coerced to one by `_apply_hs_logic` (#89), into `similar(hs)` by broadcast so a

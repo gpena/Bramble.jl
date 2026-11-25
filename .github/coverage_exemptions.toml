@@ -119,9 +119,6 @@ reason = "device-only: each is the non-Array method a host Array never dispatche
 path = "src/mesh/mesh1d.jl"
 methods = [
     "_point(::DeviceLocality",
-    "_host_points(::DeviceLocality",
-    "_host_spacings(::DeviceLocality",
-    "_host_half_spacings(::DeviceLocality",
     "_throw_no_scalar_point()",
 ]
 reason = "device-only: the ::DeviceLocality methods take device-resident storage (the HostLocality method serves every host mesh), and _throw_no_scalar_point is called only by the device _point; no device array is in the test environment."
@@ -153,10 +150,14 @@ methods = ["_probe_point_value(pts::AbstractVector"]
 reason = "device-only: the non-Array method of the probe, reached only when points(Ωₕ) is device-resident; a host mesh's Array takes the _probe_point_value(::Array, ...) method."
 
 [[exempt_function]]
+path = "src/utils/device_kernels.jl"
+methods = ["_host_array(::DeviceLocality, v::AbstractArray"]
+reason = "device-only: the ::DeviceLocality method takes device-resident storage (the HostLocality method serves every host array); no device array is in the test environment."
+
+[[exempt_function]]
 path = "src/assembly/linear.jl"
 methods = [
     "_assemble_linear!(::DeviceLocality",
-    "_host_array(::DeviceLocality, v::AbstractArray",
     "_host_array(::DeviceLocality, v::VectorElement",
     "_assemble_linear_parallel!(::DeviceLocality",
     "_host_sources(op::SourceVector",
