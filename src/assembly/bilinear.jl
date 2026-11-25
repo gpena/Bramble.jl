@@ -822,11 +822,9 @@ precompile(_type_tap_scalar, (Any, Any))
     _value_type(op, E), op)
 @inline _join_scalars(::Type{S}, op::OperatorAdd) where {S} = _join_scalars(
     _join_scalars(S, op.left_op), op.right_op)
-@inline _join_scalars(::Type{S}, op::OperatorScale) where {S} = _join_scalar(
-    S, promote_type(_scalar_type(op.scalar), S))
+@inline _join_scalars(::Type{S}, op::OperatorScale) where {S} = promote_type(
+    _scalar_type(op.scalar), S)
 @inline _join_scalars(::Type{S}, ::Any) where {S} = S
-@inline _join_scalar(::Type{S}, ::Type{S}) where {S} = S
-@inline _join_scalar(::Type, ::Type{P}) where {P} = P
 @inline _widen_summands(op::OperatorAdd, ::Type{S}, ::Type{E}) where {S, E} = OperatorAdd(
     _widen_summands(op.left_op, S, E), _widen_summands(op.right_op, S, E))
 @inline function _widen_summands(op, ::Type{S}, ::Type{E}) where {S, E}
@@ -1232,22 +1230,16 @@ function apply_dirichlet_labels!(
         A::AbstractMatrix, form::BilinearForm, dirichlet_labels, dirichlet_components = nothing
 )
     if dirichlet_labels !== nothing
-        if dirichlet_labels isa Symbol
+        if length(dirichlet_labels) >= 2
+            _dirichlet_union!(A, test_space(form), form.cache, dirichlet_labels,
+                dirichlet_components)
+        elseif !isempty(dirichlet_labels)
             dirichlet_bc!(
-                A, test_space(form), dirichlet_labels; components = dirichlet_components
+                A,
+                test_space(form),
+                dirichlet_labels...;
+                components = dirichlet_components
             )
-        elseif dirichlet_labels isa Tuple
-            if length(dirichlet_labels) >= 2
-                _dirichlet_union!(A, test_space(form), form.cache, dirichlet_labels,
-                    dirichlet_components)
-            elseif !isempty(dirichlet_labels)
-                dirichlet_bc!(
-                    A,
-                    test_space(form),
-                    dirichlet_labels...;
-                    components = dirichlet_components
-                )
-            end
         end
     end
 end

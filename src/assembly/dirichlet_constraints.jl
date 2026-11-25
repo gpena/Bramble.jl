@@ -206,7 +206,8 @@ Create a single Dirichlet boundary constraint with function `f` under the `:boun
 Internal helper turning every form accepted by the `dirichlet` keyword into the
 `(labels, conditions)` pair `apply_dirichlet_labels!`/`apply_dirichlet_conditions!`
 already take -- unifying the keyword this way adds no second implementation of applying
-constraints to keep in step with the first.
+constraints to keep in step with the first. The labels come back as a `Tuple`, or
+`nothing`, the only two shapes those functions take.
 
 Accepts, in order: `nothing`; a single label `Symbol` (bilinear only -- no values to
 carry); a `Tuple` of label `Symbol`s; a single `label => f` `Pair`; a `Tuple` of such
