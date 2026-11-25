@@ -118,9 +118,9 @@ end
 
 # Offset-aware, allocation-free walk over the union of `markers`' marked points, for every
 # reader below (`_reaction_over_leaves`, `_reaction_density_over_leaves!`, and the `!`
-# variants' own `_zero_marked!`/`_subtract_marked!`/`_copy_marked!`). A single marker is a
-# `_MarkerWalk`: the mesh's own stored mask, or the face a face name means, walked without
-# the fresh `BitVector` `index_in_marker` builds for it (gpena/Bramble.jl#1010); several
+# variants' own `_each_reaction_point`). A single marker is a `_MarkerWalk`: the mesh's own
+# stored mask, or the face a face name means, walked without the fresh `BitVector`
+# `index_in_marker` builds for it (gpena/Bramble.jl#1010); several
 # reuse the lazy `MarkedIndicesUnion` `_combined_marked_indices` (space/inner_product.jl)
 # already builds instead of `_combined_mask`'s eager one (a fresh `copy` + `.|=` per call,
 # gpena/Bramble.jl#149) -- `reaction!`/`reaction_density!` must allocate zero bytes even with
@@ -195,17 +195,17 @@ end
 
 # --- Restricted residual (gpena/Bramble.jl#289) ------------------------------------ #
 #
-# `_reaction_over_leaves`/`_reaction_density_over_leaves!` above only ever read `r` at
-# `MarkedIndices(mask, offset)` -- a small fraction of `ndofs` on a typical grid. Materializing
-# `r = A * parent(uₕ) .- F` over every row costs a full sparse matvec plus a full-length
-# allocation for that. `SparseMatrixCSC` has no row index, so pulling out even one row still
-# costs `nnz(A)`; testing every stored entry once against every *selected* leaf keeps a call
-# with several markers/components at one sweep total, not one per row or per leaf.
+# `_reaction_over_leaves` above only ever reads `r` at `MarkedIndices(mask, offset)` -- a
+# small fraction of `ndofs` on a typical grid. Materializing `r = A * parent(uₕ) .- F`
+# over every row costs a full sparse matvec plus a full-length allocation for that.
+# `SparseMatrixCSC` has no row index, so pulling out even one row still costs `nnz(A)`;
+# testing every stored entry once against every *selected* leaf keeps a call with several
+# markers/components at one sweep total, not one per row or per leaf.
 
 # One column sweep of the stored values, shared by `_restricted_matvec` and the sparse
 # `_reaction_residual!` below: each entry is tested against every selected leaf via
-# `_reaction_row_marked` (O(1) per entry), and `accumulate!(row, v, uj)` receives the marked
-# ones in column order, which is the order `SparseArrays`'s `A * u` uses, so each kept row is
+# `_row_marked` (O(1) per entry), and `accumulate!(row, v, uj)` receives the marked ones
+# in column order, which is the order `SparseArrays`'s `A * u` uses, so each kept row is
 # bit-identical to the full matvec once `accumulate!` adds with `muladd`.
 @inline function _marked_column_sweep!(accumulate!::F, A::SparseMatrixCSC, u::AbstractVector, entries::Tuple) where {F}
     rows = rowvals(A)
@@ -214,7 +214,7 @@ end
         uj = u[j]
         for k in nzrange(A, j)
             row = rows[k]
-            _reaction_row_marked(entries, row) && accumulate!(row, vals[k], uj)
+            _row_marked(entries, row) && accumulate!(row, vals[k], uj)
         end
     end
     return nothing
@@ -230,8 +230,8 @@ function _restricted_matvec(A::SparseMatrixCSC, u::AbstractVector, entries::Tupl
 end
 
 # Answers `r[j] = (A * u)[j] - F[j]` at just the rows `_restricted_matvec` kept -- every `j`
-# `_reaction_over_leaves`/`_reaction_density_over_leaves!` ever ask for is one of them, since
-# both walk the same marked points `_reaction_leaf_entries` was built from.
+# `_reaction_over_leaves` ever asks for is one of them, since it walks the same marked
+# points `_reaction_leaf_entries` was built from.
 struct _RestrictedResidual{T, Fv <: AbstractVector}
     acc::Dict{Int, T}
     F::Fv
@@ -273,60 +273,29 @@ end
 #
 # `reaction!`/`reaction_density!` need literally zero bytes per call, steady state -- not just
 # "small", which rules out `_restricted_matvec`'s `Dict` above even though that path is already
-# far smaller than the original full matvec. Below recurses over `leaves`/`markers`/
-# `components` directly instead (the same shape `_reaction_over_leaves` uses) and reads/writes
-# only through `_reaction_marked`, so it is allocation-free regardless of how many labels
-# `marker` names.
-@inline _zero_marked!(scratch::AbstractVector, ::Tuple{}, markers, components, i) = nothing
-@inline function _zero_marked!(
-        scratch::AbstractVector{T}, leaves::Tuple, markers, components, i
-) where {T}
+# far smaller than the original full matvec. `_each_reaction_point` recurses over `leaves`/
+# `markers`/`components` directly instead (the same shape `_reaction_over_leaves` uses) and
+# calls `f(j)` at each point `_reaction_marked` walks, so it is allocation-free however
+# many labels `marker` names. `f` is typed so the recursion specializes on it; each caller
+# writes its own `@inbounds`, which does not reach into `f` from the loop here.
+@inline _each_reaction_point(f::Fn, ::Tuple{}, markers, components, i) where {Fn} = nothing
+@inline function _each_reaction_point(f::Fn, leaves::Tuple, markers, components, i) where {Fn}
     sp, offset = first(leaves)
     if _leaf_selected(components, i)
-        @inbounds for j in _reaction_marked(mesh(sp), markers, offset)
-            scratch[j] = zero(T)
+        for j in _reaction_marked(mesh(sp), markers, offset)
+            f(j)
         end
     end
-    return _zero_marked!(scratch, Base.tail(leaves), markers, components, i + 1)
-end
-
-@inline _subtract_marked!(
-    scratch::AbstractVector, F::AbstractVector, ::Tuple{}, markers, components, i
-) = nothing
-@inline function _subtract_marked!(
-        scratch::AbstractVector, F::AbstractVector, leaves::Tuple, markers, components, i
-)
-    sp, offset = first(leaves)
-    if _leaf_selected(components, i)
-        @inbounds for j in _reaction_marked(mesh(sp), markers, offset)
-            scratch[j] -= F[j]
-        end
-    end
-    return _subtract_marked!(scratch, F, Base.tail(leaves), markers, components, i + 1)
-end
-
-@inline _copy_marked!(
-    scratch::AbstractVector, r::AbstractVector, ::Tuple{}, markers, components, i
-) = nothing
-@inline function _copy_marked!(
-        scratch::AbstractVector, r::AbstractVector, leaves::Tuple, markers, components, i
-)
-    sp, offset = first(leaves)
-    if _leaf_selected(components, i)
-        @inbounds for j in _reaction_marked(mesh(sp), markers, offset)
-            scratch[j] = r[j]
-        end
-    end
-    return _copy_marked!(scratch, r, Base.tail(leaves), markers, components, i + 1)
+    return _each_reaction_point(f, Base.tail(leaves), markers, components, i + 1)
 end
 
 # The column sweep needs an O(1) indexed row test, which the allocation-free walk above
 # cannot give (iterating it has no `getindex`). So both residuals share one set of entries:
 # one `NTuple{N,_MarkerPoints}` of `markers`' individual, per-label masks per leaf (each
-# `_marker_points` call is allocation-free, a face name too), ORed bit-by-bit on the fly in
-# `_reaction_row_marked`, so no label ever gets unioned into a fresh `BitVector`. One entry
-# per leaf, always (mirrors `_leaf_entries`, dirichlet_constraints.jl): the tuple's shape is
-# independent of `components`, so the recursion below stays fully unrolled.
+# `_marker_points` call is allocation-free, a face name too), ORed bit-by-bit on the fly by
+# `_mask_hit` in `_row_marked`, so no label ever gets unioned into a fresh `BitVector`. One
+# entry per leaf, always (mirrors `_leaf_entries`, dirichlet_constraints.jl): the tuple's
+# shape is independent of `components`, so the recursion below stays fully unrolled.
 @inline _reaction_leaf_entries(leaves::Tuple, markers, components) = _reaction_leaf_entries_impl(leaves, markers, components, 1)
 @inline _reaction_leaf_entries_impl(
     ::Tuple{}, markers::NTuple{N, Symbol}, components, i::Int
@@ -342,38 +311,30 @@ end
     )
 end
 
-@inline _reaction_row_marked(::Tuple{}, row::Int) = false
-@inline function _reaction_row_marked(entries::Tuple, row::Int)
-    masks, offset, n, active = first(entries)
-    if active
-        i = row - offset
-        if 1 <= i <= n
-            for mask in masks
-                @inbounds(mask[i]) && return true
-            end
-        end
-    end
-    return _reaction_row_marked(Base.tail(entries), row)
-end
-
 # Sparse: no `Dict` at all -- `scratch` (caller-owned, reused across calls) is indexed
 # directly by row, so this is zero allocation once `scratch` exists. Zero the marked entries
-# first (`_zero_marked!`, proportional to the marker's own size, not `ndofs`), accumulate with
-# the same `muladd`/column order `_restricted_matvec`/`SparseArrays`'s own `A * u` use (so
-# results are bit-identical to both), then subtract `F` at just those entries as a separate
-# final step -- not folded into the initial accumulator, which would reorder the floating-point
-# sum and break that bit-identity.
+# first (proportional to the marker's own size, not `ndofs`), accumulate with the same
+# `muladd`/column order `_restricted_matvec`/`SparseArrays`'s own `A * u` use, then subtract `F` at just those entries as a separate final step --
+# not folded into the initial accumulator, which would reorder the floating-point sum.
+# `reaction_density` goes through here, so it and `reaction_density!` agree bit for bit.
+# `reaction`'s `Dict` residual accumulates in `promote_type(eltype(A), eltype(u))` instead
+# of `scratch`'s type, so its bits can differ from these for a wider `F` (a `BigFloat`
+# load, say) or for a complex `F` with a zero imaginary part (the sign of that zero).
 function _reaction_residual!(
         scratch::AbstractVector, A::SparseMatrixCSC, F::AbstractVector, u::AbstractVector,
         leaves::Tuple, markers, components
 )
-    _zero_marked!(scratch, leaves, markers, components, 1)
+    _each_reaction_point(leaves, markers, components, 1) do j
+        @inbounds scratch[j] = zero(eltype(scratch))
+    end
     entries = _reaction_leaf_entries(leaves, markers, components)
     _marked_column_sweep!(A, u, entries) do row, v, uj
         @inbounds scratch[row] = muladd(v, uj, scratch[row])
     end
 
-    _subtract_marked!(scratch, F, leaves, markers, components, 1)
+    _each_reaction_point(leaves, markers, components, 1) do j
+        @inbounds scratch[j] -= F[j]
+    end
     return scratch
 end
 
@@ -389,7 +350,9 @@ function _reaction_residual!(
         leaves::Tuple, markers, components
 )
     r = _reaction_residual(A, F, u, ())
-    _copy_marked!(scratch, r, leaves, markers, components, 1)
+    _each_reaction_point(leaves, markers, components, 1) do j
+        @inbounds scratch[j] = r[j]
+    end
     return scratch
 end
 
@@ -492,12 +455,6 @@ function reaction!(
     return _reaction_over_leaves(leaves, r, markers, components, 1, zero(eltype(r)))
 end
 
-# Whether point `k` is in any of the markers' masks (one `BitVector` per label, looked up
-# once per leaf rather than once per point).
-@inline _any_marked_bit(::Tuple{}, k) = false
-@inline _any_marked_bit(bits::Tuple, k) = (@inbounds first(bits)[k]) ||
-                                          _any_marked_bit(Base.tail(bits), k)
-
 @noinline function _throw_density_off_faces(k::Int)
     throw(
         ArgumentError(
@@ -520,7 +477,7 @@ end
     if _leaf_selected(components, i)
         Ωₕ = mesh(sp)
         bits = map(s -> _marker_points(Ωₕ, s), markers)
-        mask = _marked_face_mask(Ωₕ, k -> _any_marked_bit(bits, k))
+        mask = _marked_face_mask(Ωₕ, k -> _mask_hit(bits, k))
         _check_surface_is_thin(Ωₕ, mask)
         every_face = ntuple(_ -> (true, true), Val(dim(Ωₕ)))
         cis = indices(Ωₕ)
@@ -556,17 +513,10 @@ function reaction_density(
         A::AbstractMatrix, F::AbstractVector, uₕ::VectorElement;
         marker, components = nothing
 )
-    _check_reaction_space(space(uₕ))
-    _validate_reaction_sizes(A, F, uₕ)
-    sp = space(uₕ)
-    leaves = leaf_spaces_offsets(sp)
-    _validate_dirichlet_components(components, length(leaves))
-
-    markers = _reaction_markers(marker)
-    r = _reaction_residual(A, F, parent(uₕ), leaves, markers, components)
-    dens = zeros(eltype(r), ndofs(sp))
-    _reaction_density_over_leaves!(dens, leaves, r, markers, components, 1)
-    return element(sp, dens)
+    # `reaction_density!` writes only the marked entries, so `dens` starts at zero.
+    dens = zeros(promote_type(eltype(A), eltype(parent(uₕ)), eltype(F)), ndofs(space(uₕ)))
+    reaction_density!(dens, A, F, uₕ; marker = marker, components = components)
+    return element(space(uₕ), dens)
 end
 
 """

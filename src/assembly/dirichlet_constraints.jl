@@ -370,6 +370,13 @@ end
 # call allocation free: `index_in_marker` hands back the mesh's stored BitVector, and
 # nothing else is built.
 
+# Whether point `i` of a leaf is marked: one mask (a `BitVector`, or the `_MarkerPoints` a
+# face name gives), or a tuple of them, one per label, ORed in turn so no union is built.
+# `reaction` (postprocessing/reaction.jl) hands `_row_marked` such a tuple per leaf.
+@inline _mask_hit(m::Union{BitVector, _MarkerPoints}, i::Int) = @inbounds m[i]
+@inline _mask_hit(::Tuple{}, i::Int) = false
+@inline _mask_hit(ms::Tuple, i::Int) = _mask_hit(first(ms), i) || _mask_hit(Base.tail(ms), i)
+
 # Whether global row `r` falls in any *selected* leaf's marked set. Recursive over the
 # tuple of leaves, so it unrolls to a handful of comparisons. An unselected leaf's own
 # `active` flag short-circuits it without touching its mask.
@@ -379,7 +386,7 @@ end
     mask, offset, n, active = first(entries)
     if active
         i = r - offset
-        (1 <= i <= n) && @inbounds(mask[i]) && return true
+        (1 <= i <= n) && _mask_hit(mask, i) && return true
     end
     return _row_marked(Base.tail(entries), r)
 end

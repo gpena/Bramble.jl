@@ -382,6 +382,32 @@ Base.size(A::_MockDeviceCSR) = (length(A.rowPtr) - 1, length(A.rowPtr) - 1)
         end
     end
 
+    # `_row_marked`'s mask test: a `BitVector`, a face `_MarkerPoints`, or a tuple of masks
+    # (one per label, as `reaction` builds them) ORed in turn.
+    @testset "Mask test, one mask or several" begin
+        local a, b, S, Ωₕ, face, xmin, left   # without `local`, these rebind the outer names
+        a = BitVector([true, false, false, true])
+        b = BitVector([false, true, false, true])
+        @test [Bramble._mask_hit(a, i) for i in 1:4] == [true, false, false, true]
+        @test Bramble._mask_hit((a, b), 2)   # only the second mask marks it
+        @test [Bramble._mask_hit((a, b), i) for i in 1:4] == [true, true, false, true]
+        @test !Bramble._mask_hit((a, b), 3)
+        @test !Bramble._mask_hit((), 1)
+
+        # `:xmin` behind `:left => :ymin` is a face no stored mask holds
+        S = interval(0.0, 1.0) × interval(0.0, 1.0)
+        Ωₕ = mesh(domain(S, :left => :ymin, :boundary => Bramble.boundary_symbols(S)), (5, 4),
+            (true, true))
+        face = Bramble._marker_points(Ωₕ, :xmin)
+        @test face.bits === nothing
+        xmin = Bramble._geometric_face_bits(Ωₕ, :xmin)
+        left = Bramble.index_in_marker(Ωₕ, :left)
+        @test any(xmin) && any(left) && xmin != left
+        @test [Bramble._mask_hit(face, k) for k in eachindex(xmin)] == xmin
+        @test [Bramble._mask_hit((Bramble._marker_points(Ωₕ, :left), face), k)
+               for k in eachindex(xmin)] == (xmin .| left)
+    end
+
     # The single-label leaf entries the composite semidiscretisation walks
     # (`_each_dirichlet_row`, problems/semidiscrete_constraints.jl): one entry per leaf,
     # each carrying that leaf's own mask, its global offset, its size and whether

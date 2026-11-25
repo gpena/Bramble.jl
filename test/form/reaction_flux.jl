@@ -595,10 +595,10 @@ _bytes(f, scratch, A, F, uₕ, marker) = @allocated f(scratch, A, F, uₕ; marke
             @test filter(k -> masks[2][k], 1:n₁) == rows(Ω₁, :right, 0)
             @test (off, nn, active) == (0, n₁, true)
             for row in 1:n₁
-                @test Base.invokelatest(Bramble._reaction_row_marked, entries, row) ==
+                @test Base.invokelatest(Bramble._row_marked, entries, row) ==
                       (row in idx)
             end
-            @test !Base.invokelatest(Bramble._reaction_row_marked, (), 1)
+            @test !Base.invokelatest(Bramble._row_marked, (), 1)
 
             # the restricted residual answers r[j] at the marked rows
             rr = Base.invokelatest(Bramble._reaction_residual, A, F, u, entries)
