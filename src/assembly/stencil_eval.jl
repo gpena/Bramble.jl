@@ -113,14 +113,12 @@ const UnaryWrapper{D} = Union{
 #
 # Two of these override a fallback declared on the *abstract* type rather than filling a
 # gap: `stencil_shift_trait(::LazyOp)` answers translation-invariant and
-# `_all_trial_interpolated(::LazyOp)` answers false, so a wrapper reaching either default
+# `_all_interpolated(side, ::LazyOp)` answers false, so a wrapper reaching either default
 # is a wrong answer, not a missing one. That is the shape of mistake this collapse is meant
 # to make impossible: there is now one method to get right per query, not fourteen.
 stencil_shift_trait(op::UnaryWrapper) = stencil_shift_trait(op.inner_op)
-_all_trial_interpolated(op::UnaryWrapper) = _all_trial_interpolated(op.inner_op)
-_all_test_interpolated(op::UnaryWrapper) = _all_test_interpolated(op.inner_op)
-_has_test_interp(op::UnaryWrapper) = _has_test_interp(op.inner_op)
-_has_trial_interp(op::UnaryWrapper) = _has_trial_interp(op.inner_op)
+_all_interpolated(side::_InterpSide, op::UnaryWrapper) = _all_interpolated(side, op.inner_op)
+_has_interp(side::_InterpSide, op::UnaryWrapper) = _has_interp(side, op.inner_op)
 _is_dirac(op::UnaryWrapper) = _is_dirac(op.inner_op)
 
 """

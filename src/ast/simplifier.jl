@@ -199,20 +199,20 @@ const _ClassValue = Union{Nothing, _MixedComponents, _ComponentClass}
 @inline _class_index(::_ComponentClass{C}) where {C} = C
 @inline _class_index(k) = k
 
-# One method set over the side (`_TestSide`/`_TrialSide`, block_extract.jl), mirroring
+# One method set over the side (`TestSide`/`TrialSide`, operators/interpolation.jl), mirroring
 # `_component_or_nothing`'s recursion; the two names below forward to it.
-@inline function _component_class(::_TestSide, ::IndexedTestFunction{D, C}) where {D, C}
+@inline function _component_class(::TestSide, ::IndexedTestFunction{D, C}) where {D, C}
     return _ComponentClass{C}()
 end
-@inline function _component_class(::_TrialSide, ::IndexedTrialFunction{D, C}) where {D, C}
+@inline function _component_class(::TrialSide, ::IndexedTrialFunction{D, C}) where {D, C}
     return _ComponentClass{C}()
 end
 @inline _component_class(side, op::UnaryWrapper) = _component_class(side, op.inner_op)
 @inline function _component_class(
-        side::_TestSide, op::Union{LinearProduct, BilinearProduct})
+        side::TestSide, op::Union{LinearProduct, BilinearProduct})
     return _component_class(side, op.right_op)
 end
-@inline function _component_class(side::_TrialSide, op::BilinearProduct)
+@inline function _component_class(side::TrialSide, op::BilinearProduct)
     return _component_class(side, op.left_op)
 end
 @inline function _component_class(side, op::OperatorAdd)
@@ -222,8 +222,8 @@ end
 end
 @inline _component_class(::Any, ::Any) = nothing
 
-@inline _test_component_class(op) = _component_class(_TestSide(), op)
-@inline _trial_component_class(op) = _component_class(_TrialSide(), op)
+@inline _test_component_class(op) = _component_class(TestSide(), op)
+@inline _trial_component_class(op) = _component_class(TrialSide(), op)
 
 # Whether the router could route `a` and `b` as one opaque term. So a rewrite may hide
 # `OperatorAdd(a, b)` inside a scale or a grid-function scaling only when this answers

@@ -6,27 +6,24 @@
 # `block_of` converts to a block coordinate `(trial, test)` or validates. Routing by
 # leaf index supports arbitrary composite function spaces.
 
-# The two sides of a form, as singletons the component classifiers dispatch on: each
-# classifier family is one method set over the side. `_component_class`
-# (ast/simplifier.jl) reads them too.
-struct _TestSide end
-struct _TrialSide end
+# Each classifier family is one method set over the side, the `TestSide`/`TrialSide`
+# singletons of operators/interpolation.jl. `_component_class` (ast/simplifier.jl) reads them too.
 
 # One method set for the throwing query, over the side. Every node wrapping one operand
 # answers what that operand answers: one method instead of thirteen registrations
 # (gpena/Bramble.jl#52); see [`UnaryWrapper`](@ref).
-_component_or_nothing(::_TestSide, op::IndexedTestFunction) = _component_index(op)
-_component_or_nothing(::_TrialSide, op::IndexedTrialFunction) = _component_index(op)
+_component_or_nothing(::TestSide, op::IndexedTestFunction) = _component_index(op)
+_component_or_nothing(::TrialSide, op::IndexedTrialFunction) = _component_index(op)
 function _component_or_nothing(side, op::UnaryWrapper)
     return _component_or_nothing(side, op.inner_op)
 end
 # A product answers for its test operand, and for its trial operand when it has one: a
 # `LinearProduct` has no trial side, so on the trial side it names none.
 function _component_or_nothing(
-        side::_TestSide, op::Union{LinearProduct, BilinearProduct})
+        side::TestSide, op::Union{LinearProduct, BilinearProduct})
     return _component_or_nothing(side, op.right_op)
 end
-function _component_or_nothing(side::_TrialSide, op::BilinearProduct)
+function _component_or_nothing(side::TrialSide, op::BilinearProduct)
     return _component_or_nothing(side, op.left_op)
 end
 # A sum inside one inner product, `innerₕ(uₕ, v + 2 * D₋ₓ(v) - Mₓ(v))`, is still one
@@ -64,7 +61,7 @@ function belongs to one block while a term built from an unindexed one belongs t
 Written as a query rather than catching an exception because it is evaluated once per
 term per assembly in time-stepping loops.
 """
-test_component_or_nothing(op) = _component_or_nothing(_TestSide(), op)
+test_component_or_nothing(op) = _component_or_nothing(TestSide(), op)
 
 """
     trial_component_or_nothing(op) -> Union{Int, Nothing}
@@ -77,7 +74,7 @@ component from each side. A term naming neither is the same integrand in every d
 block; a term naming both is one block; and a term naming one but not the other is not
 something the mathematics can express, so it is an error rather than a guess.
 """
-trial_component_or_nothing(op) = _component_or_nothing(_TrialSide(), op)
+trial_component_or_nothing(op) = _component_or_nothing(TrialSide(), op)
 
 """
     block_of(term, nblocks_trial, nblocks_test) -> Union{Nothing, Tuple{Int, Int}}

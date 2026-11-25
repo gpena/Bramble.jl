@@ -210,13 +210,6 @@ See also [`interpolation_matrix`](@ref), whose `outside` accepts only `:error`, 
 and `:extrapolate` -- a fill value cannot be represented as a linear map (see the note atop
 this file).
 """
-function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{1}}, x; outside = :error)
-    locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_interpolate_at()
-    _validate_outside(outside)
-    weights(space(uₕ))   # throws once uₕ's mesh has moved
-    return _interp_values(uₕ, mesh(space(uₕ)), x, outside)
-end
-
 function interpolate_at(uₕ::VectorElement{<:ScalarGridSpace{D}}, x; outside = :error) where {D}
     locality(typeof(parent(uₕ))) isa DeviceLocality && _throw_no_scalar_interpolate_at()
     _validate_outside(outside)
@@ -1038,68 +1031,61 @@ end
 #
 # Both are decided by the operator's type alone, allowing each rung to fold to a constant.
 
-# A node that contributes no trial column at all (such as a source or test function) answers `true`
-# vacuously, as no mesh correspondence is required.
-_all_trial_interpolated(::LazyOp) = false
-_all_trial_interpolated(op::InterpolationNode) = _interp_side(op) === TrialSide
-_all_trial_interpolated(::SourceFunction) = true
-_all_trial_interpolated(::SourceVector) = true
-_all_trial_interpolated(::SourceConstant) = true
-_all_trial_interpolated(::DiracSource) = true
-_all_trial_interpolated(::TestFunction) = true
-_all_trial_interpolated(::IndexedTestFunction) = true
+# Both questions take the side as a value, `TrialSide()` or `TestSide()`. The four
+# `_all_*_interpolated` and `_has_*_interp` one-liners keep the names the assembly and the
+# solvers read.
+const _InterpSide = Union{TrialSide, TestSide}
 
-# The mirror question, for a test-side interpolation: whether every
-# row the term scatters into is named by an interpolation. That is the other way a block may
+# Whether every column (trial side) or row (test side) the term names is named by an
+# interpolation. A node that contributes none (such as a source, or the other side's function)
+# answers `true` vacuously, as no mesh correspondence is required. That is how a block may
 # straddle two meshes without the two leaves having to share an index space.
-_all_test_interpolated(::LazyOp) = false
-_all_test_interpolated(op::InterpolationNode) = _interp_side(op) === TestSide
-_all_test_interpolated(::SourceFunction) = true
-_all_test_interpolated(::SourceVector) = true
-_all_test_interpolated(::SourceConstant) = true
-_all_test_interpolated(::DiracSource) = true
-_all_test_interpolated(::TrialFunction) = true
-_all_test_interpolated(::IndexedTrialFunction) = true
+_all_interpolated(::_InterpSide, ::LazyOp) = false
+_all_interpolated(side::_InterpSide, op::InterpolationNode) = _interp_side(op) === typeof(side)
+_all_interpolated(::_InterpSide, ::SourceFunction) = true
+_all_interpolated(::_InterpSide, ::SourceVector) = true
+_all_interpolated(::_InterpSide, ::SourceConstant) = true
+_all_interpolated(::_InterpSide, ::DiracSource) = true
+_all_interpolated(::TrialSide, ::Union{TestFunction, IndexedTestFunction}) = true
+_all_interpolated(::TestSide, ::Union{TrialFunction, IndexedTrialFunction}) = true
 
-function _all_test_interpolated(op::OperatorAdd)
-    return _all_test_interpolated(op.left_op) && _all_test_interpolated(op.right_op)
+# A sum requires both summands to interpolate.
+function _all_interpolated(side::_InterpSide, op::OperatorAdd)
+    return _all_interpolated(side, op.left_op) && _all_interpolated(side, op.right_op)
 end
 
-_all_test_interpolated(op::BilinearProduct) = _all_test_interpolated(op.right_op)
-_all_test_interpolated(op::LinearProduct) = true
+# Only one factor of a product contributes the side's slots: the left one the columns, the right
+# one the rows. A linear product contributes none: its left factor is contracted away
+# (`multiply_stencils_linear`), which is why a source interpolation belongs there and an
+# operator one does not.
+_all_interpolated(::TrialSide, op::BilinearProduct) = _all_interpolated(TrialSide(), op.left_op)
+_all_interpolated(::TestSide, op::BilinearProduct) = _all_interpolated(TestSide(), op.right_op)
+_all_interpolated(::_InterpSide, ::LinearProduct) = true
 
-# Whether the term carries a test-side interpolation anywhere. This is what decides which
+@inline _all_trial_interpolated(op) = _all_interpolated(TrialSide(), op)
+@inline _all_test_interpolated(op) = _all_interpolated(TestSide(), op)
+
+# Whether the term carries an interpolation of that side anywhere. The test side decides which
 # leaf's grid the sweep walks: the native side's, since that is the side whose mesh supplies
-# the quadrature weight the product integrates against. Decided by type alone, so the choice
-# folds away at compile time.
-_has_test_interp(::LazyOp) = false
-_has_test_interp(op::InterpolationNode) = _interp_side(op) === TestSide
+# the quadrature weight the product integrates against. The trial side is asked only by
+# `_check_one_interpolated_side` (operators/inner.jl): the walked leaf does not depend on it,
+# since a trial-side interpolation leaves the test side native and that is where the sweep
+# already walks.
+_has_interp(::_InterpSide, ::LazyOp) = false
+_has_interp(side::_InterpSide, op::InterpolationNode) = _interp_side(op) === typeof(side)
 
-# The same question for the trial side, which only `_check_one_interpolated_side`
-# (operators/inner.jl) asks: the walked leaf does not depend on it, since a trial-side
-# interpolation leaves the test side native and that is where the sweep already walks.
-_has_trial_interp(::LazyOp) = false
-_has_trial_interp(op::InterpolationNode) = _interp_side(op) === TrialSide
-
-function _has_trial_interp(op::OperatorAdd)
-    return _has_trial_interp(op.left_op) || _has_trial_interp(op.right_op)
+function _has_interp(side::_InterpSide, op::OperatorAdd)
+    return _has_interp(side, op.left_op) || _has_interp(side, op.right_op)
 end
 
-function _has_trial_interp(op::BilinearProduct)
-    return _has_trial_interp(op.left_op) || _has_trial_interp(op.right_op)
+function _has_interp(side::_InterpSide, op::BilinearProduct)
+    return _has_interp(side, op.left_op) || _has_interp(side, op.right_op)
 end
 
-_has_trial_interp(op::LinearProduct) = false
+_has_interp(::_InterpSide, ::LinearProduct) = false
 
-function _has_test_interp(op::OperatorAdd)
-    return _has_test_interp(op.left_op) || _has_test_interp(op.right_op)
-end
-
-function _has_test_interp(op::BilinearProduct)
-    return _has_test_interp(op.left_op) || _has_test_interp(op.right_op)
-end
-
-_has_test_interp(op::LinearProduct) = false
+@inline _has_trial_interp(op) = _has_interp(TrialSide(), op)
+@inline _has_test_interp(op) = _has_interp(TestSide(), op)
 
 """
     _walked_leaf(term, trial_leaf, test_leaf)
@@ -1114,18 +1100,6 @@ quadrature weight and the columns.
 @inline function _walked_leaf(term, trial_leaf, test_leaf)
     return _has_test_interp(term) ? trial_leaf : test_leaf
 end
-
-# A sum requires both summands to interpolate.
-function _all_trial_interpolated(op::OperatorAdd)
-    return _all_trial_interpolated(op.left_op) && _all_trial_interpolated(op.right_op)
-end
-
-# Only the trial side of a product contributes columns, so only the trial side is inspected. A
-# linear product contributes none: its left factor is contracted away
-# (`multiply_stencils_linear`), which is why a source interpolation belongs there and an
-# operator one does not.
-_all_trial_interpolated(op::BilinearProduct) = _all_trial_interpolated(op.left_op)
-_all_trial_interpolated(op::LinearProduct) = true
 
 # Bind every interpolation the term carries to the leaf whose columns it writes into.
 #
