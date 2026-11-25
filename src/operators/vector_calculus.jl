@@ -22,15 +22,6 @@
 # device destination every entry point launches one fused `KernelAbstractions` kernel instead
 # (`ext/BrambleKernelAbstractionsExt.jl`); without the extension the launcher throws a named
 # error.
-function _throw_no_ka_vector_calculus_kernel(fname::String)
-    error(
-        "$fname requires KernelAbstractions.jl to apply a vector-calculus operator to a " *
-        "device-backed VectorElement. Add `using KernelAbstractions` (and the package " *
-        "providing this backend's device, e.g. `using Metal`) before calling it on this " *
-        "backend.",
-    )
-end
-
 """
     _launch_fused_divergence!(out, comps::Tuple, hs::Tuple, dims::Tuple, dir::GridDirection, dev) -> Nothing
 
@@ -38,7 +29,7 @@ Fills `out` with the discrete divergence of the `D`-component vector field `comp
 (`divₕ`/`div₊ₕ`'s `Backward`/`Forward` forms), one fused device kernel reading every
 component once per grid point, filled by `ext/BrambleKernelAbstractionsExt.jl`.
 """
-_launch_fused_divergence!(out, comps, hs, dims, dir, dev) = _throw_no_ka_vector_calculus_kernel("divₕ!/div₊ₕ!")
+_launch_fused_divergence!(out, comps, hs, dims, dir, dev) = _throw_no_device_kernel(:vector_calculus, "divₕ!/div₊ₕ!")
 
 """
     _launch_fused_curl2d!(out, u1, u2, h1, h2, dims::Tuple, dir::GridDirection, dev) -> Nothing
@@ -46,7 +37,7 @@ _launch_fused_divergence!(out, comps, hs, dims, dir, dev) = _throw_no_ka_vector_
 Fills `out` with the 2D scalar curl `D_{dir,x}(u2) - D_{dir,y}(u1)`, one fused device
 kernel, filled by `ext/BrambleKernelAbstractionsExt.jl`.
 """
-_launch_fused_curl2d!(out, u1, u2, h1, h2, dims, dir, dev) = _throw_no_ka_vector_calculus_kernel("curlₕ!/curl₊ₕ!")
+_launch_fused_curl2d!(out, u1, u2, h1, h2, dims, dir, dev) = _throw_no_device_kernel(:vector_calculus, "curlₕ!/curl₊ₕ!")
 
 """
     _launch_fused_curl3d!(out1, out2, out3, u1, u2, u3, h1, h2, h3, dims::Tuple, dir::GridDirection, dev) -> Nothing
@@ -55,9 +46,7 @@ Fills the three components of the 3D curl, one fused device kernel reading `u1`,
 `u3` once per grid point, filled by `ext/BrambleKernelAbstractionsExt.jl`.
 """
 function _launch_fused_curl3d!(out1, out2, out3, u1, u2, u3, h1, h2, h3, dims, dir, dev)
-    _throw_no_ka_vector_calculus_kernel(
-        "curlₕ!/curl₊ₕ!"
-    )
+    _throw_no_device_kernel(:vector_calculus, "curlₕ!/curl₊ₕ!")
 end
 
 """
@@ -67,7 +56,7 @@ Fills `out` with the conservative discrete Laplacian of `u`, one fused device ke
 summing every direction's flux difference per grid point, filled by
 `ext/BrambleKernelAbstractionsExt.jl`.
 """
-_launch_fused_laplacian!(out, u, hbs, hss, dims, dev) = _throw_no_ka_vector_calculus_kernel("Δₕ!")
+_launch_fused_laplacian!(out, u, hbs, hss, dims, dev) = _throw_no_device_kernel(:vector_calculus, "Δₕ!")
 
 """
     _launch_fused_strain_offdiag!(out, ui, uj, hi, hj, dims::Tuple, dim_i::Val, dim_j::Val, dev) -> Nothing
@@ -77,8 +66,8 @@ Fills `out` with the off-diagonal strain tensor entry
 the average in a single pass rather than two, filled by
 `ext/BrambleKernelAbstractionsExt.jl`.
 """
-_launch_fused_strain_offdiag!(out, ui, uj, hi, hj, dims, dim_i, dim_j, dev) = _throw_no_ka_vector_calculus_kernel(
-    "εₕ!"
+_launch_fused_strain_offdiag!(out, ui, uj, hi, hj, dims, dim_i, dim_j, dev) = _throw_no_device_kernel(
+    :vector_calculus, "εₕ!"
 )
 
 @inline _direction_spacing(sub, ::Backward) = backward_spacings_for_derivative(sub)
@@ -390,7 +379,7 @@ function divₕ!(vₕ::VectorElement, uₕ)
     comps = _field_components(uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
-    _check_field_arity(comps, Val(D), "divₕ")
+    _check_field_arity(comps, Val(D), "divₕ!")
     _check_field_grid(comps)
     _check_dest_grid(vₕ, first(comps))
     _check_dest_alias(vₕ, comps)
@@ -416,7 +405,7 @@ function div₊ₕ!(vₕ::VectorElement, uₕ)
     comps = _field_components(uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
-    _check_field_arity(comps, Val(D), "div₊ₕ")
+    _check_field_arity(comps, Val(D), "div₊ₕ!")
     _check_field_grid(comps)
     _check_dest_grid(vₕ, first(comps))
     _check_dest_alias(vₕ, comps)
@@ -922,15 +911,8 @@ end
 
 @inline _direction_spacing(sub, ::Centered) = star_spacings(sub)
 
-@noinline function _throw_no_centered_device_kernel(fname::String)
-    error(
-        "$fname has no device kernel yet: the centered vector-calculus operators run on " *
-        "host arrays only. Apply it to a host-backed grid function instead.",
-    )
-end
-
 @inline _check_centered_host(v::VectorElement, fname) = _is_device(parent(v)) ?
-                                                        _throw_no_centered_device_kernel(fname) :
+                                                        _throw_no_device_kernel(:centered, fname) :
                                                         nothing
 @inline _check_centered_host(v::Tuple, fname) = _check_centered_host(first(v), fname)
 
@@ -1052,7 +1034,7 @@ function divcₕ!(vₕ::VectorElement, uₕ)
     comps = _field_components(uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
-    _check_field_arity(comps, Val(D), "divcₕ")
+    _check_field_arity(comps, Val(D), "divcₕ!")
     _check_field_grid(comps)
     _check_dest_grid(vₕ, first(comps))
     _check_dest_alias(vₕ, comps)
@@ -1191,16 +1173,8 @@ end
 
 struct StarForward end
 
-@noinline function _throw_no_star_device_kernel(fname::String)
-    error(
-        "$fname has no device kernel yet: the tilde vector-calculus operators and the " *
-        "forward strain run on host arrays only. Apply it to a host-backed grid function " *
-        "instead.",
-    )
-end
-
 @inline _check_star_host(v::VectorElement, fname) = _is_device(parent(v)) ?
-                                                    _throw_no_star_device_kernel(fname) :
+                                                    _throw_no_device_kernel(:star, fname) :
                                                     nothing
 @inline _check_star_host(v::Tuple, fname) = _check_star_host(first(v), fname)
 
@@ -1298,7 +1272,7 @@ function diṽₕ!(vₕ::VectorElement, uₕ)
     comps = _field_components(uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
-    _check_field_arity(comps, Val(D), "diṽₕ")
+    _check_field_arity(comps, Val(D), "diṽₕ!")
     _check_field_grid(comps)
     _check_dest_grid(vₕ, first(comps))
     _check_dest_alias(vₕ, comps)
@@ -1588,7 +1562,7 @@ function div̽ₕ!(vₕ::VectorElement, uₕ)
     comps = _field_components(uₕ)
     Wₕ = _field_space(uₕ)
     D = dim(mesh(Wₕ))
-    _check_field_arity(comps, Val(D), "div̽ₕ")
+    _check_field_arity(comps, Val(D), "div̽ₕ!")
     _check_field_grid(comps)
     _check_dest_grid(vₕ, first(comps))
     _check_dest_alias(vₕ, comps)

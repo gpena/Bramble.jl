@@ -104,11 +104,57 @@ end
 # diagnostic instead of failing several frames later on a scalar index.
 #------------------------------------------------------------------------------------------#
 
-@noinline function _throw_no_ka_projection_kernel(fname::String)
-    return error(
-        "$fname requires KernelAbstractions.jl to fill a device-backed VectorElement. Add " *
-        "`using KernelAbstractions` (and the package providing this backend's device, e.g. " *
-        "`using Metal`) before calling Rₕ!/Rₕ on this backend.",
+# The one refusal every launcher fallback and device guard of `operators/` throws, in the
+# message and exception type of its family (`what`; `fname` names the operator or launcher
+# that was reached). The `KernelAbstractions` messages (`_NO_KA_ACTIONS`) say the extension
+# is missing, the `no device kernel yet` ones that the operator has no device path at all.
+# Only the shift throws an `ArgumentError`.
+@noinline function _throw_no_device_kernel(what::Symbol, fname::AbstractString = "")
+    haskey(_NO_KA_ACTIONS, what) && throw(_no_ka_error(what, fname))
+    throw(_no_device_kernel_error(Val(what), fname))
+end
+
+# What each launcher fallback was asked to do, and what the message tells the caller to
+# call: the two halves of its sentence, the first ending in the article.
+const _NO_KA_ACTIONS = (
+    projection = ("fill a", "Rₕ!/Rₕ"),
+    average = ("apply an average operator to a", "it"),
+    difference = ("apply a difference operator to a", "it"),
+    vector_calculus = ("apply a vector-calculus operator to a", "it")
+)
+
+function _no_ka_error(what::Symbol, fname)
+    action, callee = _NO_KA_ACTIONS[what]
+    return ErrorException(
+        "$fname requires KernelAbstractions.jl to $action device-backed VectorElement. " *
+        "Add `using KernelAbstractions` (and the package providing this backend's device, " *
+        "e.g. `using Metal`) before calling $callee on this backend.",
+    )
+end
+
+function _no_device_kernel_error(::Val{:centered}, fname)
+    return ErrorException(
+        "$fname has no device kernel yet: the centered vector-calculus operators run on " *
+        "host arrays only. Apply it to a host-backed grid function instead.",
+    )
+end
+function _no_device_kernel_error(::Val{:star}, fname)
+    return ErrorException(
+        "$fname has no device kernel yet: the tilde vector-calculus operators and the " *
+        "forward strain run on host arrays only. Apply it to a host-backed grid function " *
+        "instead.",
+    )
+end
+function _no_device_kernel_error(::Val{:centered_average}, fname)
+    return ErrorException(
+        "the centered average (Mcₓ, Mcᵧ, Mc₂, Mcₕ) has no device kernel yet; apply it to " *
+        "a host-backed VectorElement instead.",
+    )
+end
+function _no_device_kernel_error(::Val{:shift}, fname)
+    return ArgumentError(
+        "the index shifts (S₊ₓ, S₊ᵧ, S₊₂, S₋ₓ, S₋ᵧ, S₋₂, S₊ₕ, S₋ₕ) have no device kernel: " *
+        "one is tracked on milestone v4.7.0. Apply them to a host-backed VectorElement.",
     )
 end
 
@@ -127,9 +173,9 @@ in the sense [`Rₕ!`](@ref)'s docstring describes.
 
 # Throws
 - `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
-  kernel to reach (`_throw_no_ka_projection_kernel`).
+  kernel to reach (`_throw_no_device_kernel`).
 """
-_launch_restriction!(v, pts, f, dev, sel) = _throw_no_ka_projection_kernel("_launch_restriction!")
+_launch_restriction!(v, pts, f, dev, sel) = _throw_no_device_kernel(:projection, "_launch_restriction!")
 
 """
     _launch_restriction_scatter!(mats::Tuple, pts::AbstractVector, f, dev, sel) -> Nothing
@@ -140,9 +186,9 @@ point of a 1D mesh and scatters its components into the destination tuple `mats`
 in [`_launch_restriction!`](@ref). Same GPU-compilability requirement on `f`.
 
 # Throws
-- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_device_kernel`).
 """
-_launch_restriction_scatter!(mats, pts, f, dev, sel) = _throw_no_ka_projection_kernel("_launch_restriction_scatter!")
+_launch_restriction_scatter!(mats, pts, f, dev, sel) = _throw_no_device_kernel(:projection, "_launch_restriction_scatter!")
 
 # The `D >= 2` counterparts: a tensor-product mesh stores one coordinate vector per axis
 # (`points(Ωₕ::MeshnD) -> NTuple{D,AbstractVector}`), so the point at Cartesian index `I`
@@ -160,9 +206,9 @@ via a `KernelAbstractions.@kernel` launch on `dev`. `sel` restricts it to a mark
 list as in [`_launch_restriction!`](@ref). Same GPU-compilability requirement on `f`.
 
 # Throws
-- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_device_kernel`).
 """
-_launch_restriction_nd!(v, pts, idxs, f, dev, sel) = _throw_no_ka_projection_kernel("_launch_restriction_nd!")
+_launch_restriction_nd!(v, pts, idxs, f, dev, sel) = _throw_no_device_kernel(:projection, "_launch_restriction_nd!")
 
 """
     _launch_restriction_scatter_nd!(mats::Tuple, pts::Tuple, idxs, f, dev, sel) -> Nothing
@@ -174,10 +220,11 @@ once, and scatters its components into the destination tuple `mats`, via a
 in [`_launch_restriction!`](@ref). Same GPU-compilability requirement on `f`.
 
 # Throws
-- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_device_kernel`).
 """
 function _launch_restriction_scatter_nd!(mats, pts, idxs, f, dev, sel)
-    _throw_no_ka_projection_kernel(
+    _throw_no_device_kernel(
+        :projection,
         "_launch_restriction_scatter_nd!"
     )
 end

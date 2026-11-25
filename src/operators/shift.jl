@@ -220,22 +220,13 @@ neighbour gets 0. `nbands == 1` is the whole grid, which is the serial engine.
     return nothing
 end
 
-@noinline function _throw_no_device_shift()
-    throw(
-        ArgumentError(
-        "the index shifts (S₊ₓ, S₊ᵧ, S₊₂, S₋ₓ, S₋ᵧ, S₋₂, S₊ₕ, S₋ₕ) have no device kernel: " *
-        "one is tracked on milestone v4.7.0. Apply them to a host-backed VectorElement.",
-    ),
-    )
-end
-
 # Every CPU policy goes through `_run_bands!` (`vector_calculus.jl`): the single band
 # serially, one band per thread under `CpuThreaded`, one per `@batch` task under
 # `CpuPolyester` through the generic `_batch_run_bands!` hook `BramblePolyesterExt` already
 # fills, so the shifts need no extension hook of their own.
 @inline _shift_engine!(policy::CpuPolicy, out, in_ref, dims, dir, dim_val) = _run_bands!(
     policy, _shift_band!, out, in_ref, dims, dir, dim_val)
-@noinline _shift_engine!(::GpuPolicy, out, in_ref, dims, dir, dim_val) = _throw_no_device_shift()
+@noinline _shift_engine!(::GpuPolicy, out, in_ref, dims, dir, dim_val) = _throw_no_device_kernel(:shift)
 
 # The applicator `@operator_family` calls. A device-backed element on a host policy is
 # refused here too, before the host loop scalar-indexes it; a `GpuPolicy` space reaches
@@ -251,7 +242,7 @@ end
     _check_no_alias(vₕ, uₕ)
     _check_same_grid(vₕ, uₕ)
     (locality(typeof(vₕ.data)) isa DeviceLocality ||
-     locality(typeof(uₕ.data)) isa DeviceLocality) && _throw_no_device_shift()
+     locality(typeof(uₕ.data)) isa DeviceLocality) && _throw_no_device_kernel(:shift)
     dims = _grid_dims(uₕ)
     _check_stencil_dim(DIM, length(dims))
     _shift_engine!(execution_policy(space(uₕ)), vₕ.data, uₕ.data, dims, dir, Val(DIM))

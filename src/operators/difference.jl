@@ -733,15 +733,6 @@ end
 # index.
 #------------------------------------------------------------------------------------------#
 
-@noinline function _throw_no_ka_stencil_kernel(fname::String)
-    return error(
-        "$fname requires KernelAbstractions.jl to apply a difference operator to a " *
-        "device-backed VectorElement. Add `using KernelAbstractions` (and the package " *
-        "providing this backend's device, e.g. `using Metal`) before calling it on this " *
-        "backend.",
-    )
-end
-
 # Deliberately untyped, matching the `_launch_restriction!`/`_launch_half_points!`
 # fallback idiom (`operators/restriction.jl`, `src/mesh/mesh1d.jl`): the extension's
 # methods are typed on `AbstractVector`/`Tuple`, and a fallback with the same signature
@@ -758,12 +749,10 @@ one boundary slice with no neighbour to zero, matching `_compute_difference`'s
 
 # Throws
 - `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
-  kernel to reach (`_throw_no_ka_stencil_kernel`).
+  kernel to reach (`_throw_no_device_kernel`).
 """
 function _launch_difference_onesided!(out, in_ref, h, dims, dir, dim_val, dev)
-    _throw_no_ka_stencil_kernel(
-        "_launch_difference_onesided!"
-    )
+    _throw_no_device_kernel(:difference, "_launch_difference_onesided!")
 end
 
 """
@@ -777,12 +766,10 @@ one-sided difference the near side still defines for `CrossWeighted`. Runs via a
 of `_difference_engine!`'s CPU sweep above.
 
 # Throws
-- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_stencil_kernel`).
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_device_kernel`).
 """
 function _launch_difference_centered!(out, in_ref, h, dims, dir, dim_val, dev)
-    _throw_no_ka_stencil_kernel(
-        "_launch_difference_centered!"
-    )
+    _throw_no_device_kernel(:difference, "_launch_difference_centered!")
 end
 
 # One-sided (`Forward`/`Backward`) and centered (`Centered`/`CrossWeighted`) stencils reach
@@ -1075,8 +1062,7 @@ points along the direction.
 """
 function centered_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM}
     _check_stencil_dim(DIM, dim(Ωₕ))
-    n = npoints(Ωₕ(DIM))
-    n >= 3 || _throw_centered_too_few_points(DIM, n)
+    _check_centered_points(Ωₕ(DIM), DIM)
 
     return stencil_matrix(Ωₕ, CenteredDiffOp{DIM}())
 end
@@ -1093,8 +1079,7 @@ cross-weighting. The mesh still needs at least three points along the direction.
 """
 function cross_weighted_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM}
     _check_stencil_dim(DIM, dim(Ωₕ))
-    n = npoints(Ωₕ(DIM))
-    n >= 3 || _throw_centered_too_few_points(DIM, n)
+    _check_centered_points(Ωₕ(DIM), DIM)
 
     return stencil_matrix(Ωₕ, CrossWeightedDiffOp{DIM}())
 end
@@ -1564,16 +1549,14 @@ end
 # divₕ(v))` assembles `inner₊(divₕ(w), divₕ(w), Val(S))` of the runtime operator
 # (gpena/Bramble.jl#694). The staggered divergence has no runtime twin, hence its own name.
 
-@inline function _vc_bwd(op, d::Int)
-    d == 1 && return D₋ₓ(op)
-    d == 2 && return D₋ᵧ(op)
-    return D₋₂(op)
-end
-
-@inline function _vc_avg(op, d::Int)
-    d == 1 && return Mₓ(op)
-    d == 2 && return Mᵧ(op)
-    return M₂(op)
+# The `d`-th axis node of a node family, `family` being its dispatch alias (`D₋`, `Mₕ`, `Dc`,
+# `D̽ₕ`). Every `d ≥ 3` maps to the third axis, as the subscripted aliases stop there. The
+# branches keep each call's node type known to inference for a literal `d`, which a runtime
+# `Val(min(d, 3))` would not (gpena/Bramble.jl#921).
+@inline function _vc_axis(family::F, op, d::Int) where {F}
+    d == 1 && return family(op, Val(1))
+    d == 2 && return family(op, Val(2))
+    return family(op, Val(3))
 end
 
 @inline _stagger_set(i::Int, j::Int) = i == j ? (i,) : (min(i, j), max(i, j))
@@ -1590,8 +1573,11 @@ end
 # Building the four cross terms directly, the way a user would expand `(a+b)*(c+d)` by hand,
 # means no node here ever mixes components in the first place.
 @inline function _strain_pieces(u, i::Int, j::Int)
-    i == j && return (_vc_bwd(u(i), i),)
-    return ((1 // 2) * _vc_avg(_vc_bwd(u(i), j), i), (1 // 2) * _vc_avg(_vc_bwd(u(j), i), j))
+    i == j && return (_vc_axis(D₋, u(i), i),)
+    return (
+        (1 // 2) * _vc_axis(Mₕ, _vc_axis(D₋, u(i), j), i),
+        (1 // 2) * _vc_axis(Mₕ, _vc_axis(D₋, u(j), i), j)
+    )
 end
 
 # One term of the staggered divergence: D_{-i}(u_i), averaged onto the shared cell centre by
@@ -1601,9 +1587,9 @@ end
 # constant propagation does not reach through it and the elasticity `form` inferred `Any`
 # (gpena/Bramble.jl#921).
 @generated function _div_term(u, ::Val{i}, ::Val{D}) where {i, D}
-    ex = :(_vc_bwd(u($i), $i))
+    ex = :(_vc_axis(D₋, u($i), $i))
     for d in 1:D
-        d == i || (ex = :(_vc_avg($ex, $d)))
+        d == i || (ex = :(_vc_axis(Mₕ, $ex, $d)))
     end
     return :(@inline; $ex)
 end
@@ -1698,7 +1684,7 @@ through [`inner₊`](@ref)`(left, right, Val(S))`.
 See also: [`divₘₕ`](@ref), [`εₕ`](@ref).
 """
 function divₕ(u::LazyOp{D}) where {D}
-    terms = ntuple(i -> _vc_bwd(u(i), i), Val(D))
+    terms = ntuple(i -> _vc_axis(D₋, u(i), i), Val(D))
     return _DivergenceTerms{D, typeof(terms)}(terms)
 end
 
@@ -1745,12 +1731,6 @@ end
 # the runtime `divcₕ(uₕ)`/`εcₕ(uₕ)` over grid functions (untyped) and disjoint from any grid
 # function, so the symbolic and numeric families never meet.
 
-@inline function _vc_centered(op, d::Int)
-    d == 1 && return Dcₓ(op)
-    d == 2 && return Dcᵧ(op)
-    return Dc₂(op)
-end
-
 """
     divcₕ(u::LazyOp{D}) -> LazyOp
 
@@ -1768,7 +1748,7 @@ wherever an operator is, e.g. `innerₕ(p, divcₕ(v))`. Shares its name with th
 See also: [`εcₕ`](@ref), [`divₕ`](@ref).
 """
 function divcₕ(u::LazyOp{D}) where {D}
-    return foldl(+, ntuple(i -> _vc_centered(u(i), i), Val(D)))
+    return foldl(+, ntuple(i -> _vc_axis(Dc, u(i), i), Val(D)))
 end
 
 """
@@ -1782,8 +1762,8 @@ struct _CenteredStrainTensor{D, T}
     entries::T
 end
 
-# `diff(op, d)` is the family's difference along `d`: `_vc_centered` for `εcₕ`,
-# `_vc_cross_weighted` for `ε̽ₕ`.
+# `diff(op, d)` is the family's difference along `d`: `_vc_axis(Dc, ...)` for `εcₕ`,
+# `_vc_axis(D̽ₕ, ...)` for `ε̽ₕ`.
 @inline function _centered_strain_pieces(diff::F, u, i::Int, j::Int) where {F}
     i == j && return (diff(u(i), i),)
     return ((1 // 2) * diff(u(i), j), (1 // 2) * diff(u(j), i))
@@ -1808,7 +1788,7 @@ See also: [`divcₕ`](@ref), [`εₕ`](@ref).
 """
 function εcₕ(u::LazyOp{D}) where {D}
     entries = ntuple(Val(D)) do i
-        ntuple(j -> _centered_strain_pieces(_vc_centered, u, i, j), Val(D))
+        ntuple(j -> _centered_strain_pieces(Base.Fix1(_vc_axis, Dc), u, i, j), Val(D))
     end
     return _CenteredStrainTensor{D, typeof(entries)}(entries)
 end
@@ -1843,12 +1823,6 @@ end
 # place of `Dc`: an ordinary operator sum, and a `_CenteredStrainTensor` consumed by the same
 # `innerₕ` method. No form curl, matching the centered family. The same `LazyOp{D}` versus
 # untyped split keeps them apart from the runtime `div̽ₕ(uₕ)`/`ε̽ₕ(uₕ)`.
-
-@inline function _vc_cross_weighted(op, d::Int)
-    d == 1 && return D̽ₕ(op, Val(1))
-    d == 2 && return D̽ₕ(op, Val(2))
-    return D̽ₕ(op, Val(3))
-end
 
 """
     div̽ₕ(u::LazyOp{D}) -> LazyOp
@@ -1891,7 +1865,7 @@ See also: [`div̽ₕ`](@ref), [`εcₕ`](@ref).
 """
 function ε̽ₕ(u::LazyOp{D}) where {D}
     entries = ntuple(Val(D)) do i
-        ntuple(j -> _centered_strain_pieces(_vc_cross_weighted, u, i, j), Val(D))
+        ntuple(j -> _centered_strain_pieces(Base.Fix1(_vc_axis, D̽ₕ), u, i, j), Val(D))
     end
     return _CenteredStrainTensor{D, typeof(entries)}(entries)
 end
@@ -1900,13 +1874,18 @@ end
 # Expression rendering (gpena/Bramble.jl#274)
 # ==============================================================================
 
-expression(op::BackwardDifference{D, Dim}) where {D, Dim} = "D₋$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
-expression(op::ForwardDifference{D, Dim}) where {D, Dim} = "D₊$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
-expression(op::CenteredDifference{D, Dim}) where {D, Dim} = "Dc$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
-expression(op::StarDifference{D, Dim}) where {D, Dim} = "D̃$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
-function expression(op::CrossWeightedDifference{D, Dim}) where {D, Dim}
-    "D̽$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+# One rendering for every node family whose text is `<stem><axis>(inner)`: each family names
+# its stem in its own file, beside its struct. `SecondDifference` and `ShiftNode` render
+# differently and keep their own methods.
+function expression(op::StencilNode{D, Dim}) where {D, Dim}
+    "$(_expression_stem(op))$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
 end
+
+_expression_stem(::BackwardDifference) = "D₋"
+_expression_stem(::ForwardDifference) = "D₊"
+_expression_stem(::CenteredDifference) = "Dc"
+_expression_stem(::StarDifference) = "D̃"
+_expression_stem(::CrossWeightedDifference) = "D̽"
 function expression(op::SecondDifference{D, Dim}) where {D, Dim}
     s = _BRAMBLE_var2symbol[Dim]
     "D̃$(s)(D₋$(s)($(expression(op.inner_op))))"

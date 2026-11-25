@@ -124,9 +124,9 @@ end
 function strain_half(u::Bramble.LazyOp{D}) where {D}
     entries = ntuple(Val(D)) do i
         ntuple(Val(D)) do j
-            i == j && return (Bramble._vc_bwd(u(i), i),)
-            return (0.5 * Bramble._vc_avg(Bramble._vc_bwd(u(i), j), i),
-                0.5 * Bramble._vc_avg(Bramble._vc_bwd(u(j), i), j))
+            i == j && return (Bramble._vc_axis(Bramble.D₋, u(i), i),)
+            return (0.5 * Bramble._vc_axis(Bramble.Mₕ, Bramble._vc_axis(Bramble.D₋, u(i), j), i),
+                0.5 * Bramble._vc_axis(Bramble.Mₕ, Bramble._vc_axis(Bramble.D₋, u(j), i), j))
         end
     end
     return Bramble._StrainTensor{D, typeof(entries)}(entries)

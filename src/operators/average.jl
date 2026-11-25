@@ -35,15 +35,6 @@
 # index.
 #------------------------------------------------------------------------------------------#
 
-@noinline function _throw_no_ka_average_kernel(fname::String)
-    return error(
-        "$fname requires KernelAbstractions.jl to apply an average operator to a " *
-        "device-backed VectorElement. Add `using KernelAbstractions` (and the package " *
-        "providing this backend's device, e.g. `using Metal`) before calling it on this " *
-        "backend.",
-    )
-end
-
 """
     _launch_average_engine!(out::AbstractVector, in_ref, dims::Tuple, dir::GridDirection, dim_val::Val, dev) -> Nothing
 
@@ -55,9 +46,9 @@ sweep below.
 
 # Throws
 - `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
-  kernel to reach (`_throw_no_ka_average_kernel`).
+  kernel to reach (`_throw_no_device_kernel`).
 """
-_launch_average_engine!(out, in_ref, dims, dir, dim_val, dev) = _throw_no_ka_average_kernel("_launch_average_engine!")
+_launch_average_engine!(out, in_ref, dims, dir, dim_val, dev) = _throw_no_device_kernel(:average, "_launch_average_engine!")
 
 # The checks both scalar `_apply_averaged!` methods make before their engine call.
 @inline function _check_averaged(vₕ, uₕ, ::Val{DIM}) where {DIM}
@@ -362,13 +353,6 @@ end
     _batch_centered_average_engine!,
     out, in_ref, dims, dim_val)
 
-@noinline function _throw_no_device_centered_average()
-    return error(
-        "the centered average (Mcₓ, Mcᵧ, Mc₂, Mcₕ) has no device kernel yet; apply it to " *
-        "a host-backed VectorElement instead.",
-    )
-end
-
 @inline function _apply_averaged!(
         vₕ::VectorElement{<:ScalarGridSpace},
         uₕ::VectorElement{<:ScalarGridSpace},
@@ -378,7 +362,7 @@ end
     _check_averaged(vₕ, uₕ, dim_val)
     sp = space(uₕ)
     (execution_policy(sp) isa GpuPolicy || locality(typeof(vₕ.data)) isa DeviceLocality ||
-     locality(typeof(uₕ.data)) isa DeviceLocality) && _throw_no_device_centered_average()
+     locality(typeof(uₕ.data)) isa DeviceLocality) && _throw_no_device_kernel(:centered_average)
     _centered_average_engine!(execution_policy(sp), vₕ.data, uₕ.data, _grid_dims(uₕ), dim_val)
     return vₕ
 end
@@ -601,6 +585,7 @@ end
 # Expression rendering (gpena/Bramble.jl#274)
 # ==============================================================================
 
-expression(op::BackwardAverage{D, Dim}) where {D, Dim} = "M$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
-expression(op::ForwardAverage{D, Dim}) where {D, Dim} = "M₊$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
-expression(op::CenteredAverage{D, Dim}) where {D, Dim} = "Mc$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+# The shared `expression` method is in `operators/difference.jl`.
+_expression_stem(::BackwardAverage) = "M"
+_expression_stem(::ForwardAverage) = "M₊"
+_expression_stem(::CenteredAverage) = "Mc"

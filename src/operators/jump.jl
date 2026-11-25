@@ -137,4 +137,5 @@ end
 # Expression rendering (gpena/Bramble.jl#274)
 # ==============================================================================
 
-expression(op::JumpNode{D, Dim}) where {D, Dim} = "jump$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+# The shared `expression` method is in `operators/difference.jl`.
+_expression_stem(::JumpNode) = "jump"

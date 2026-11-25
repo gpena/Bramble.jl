@@ -56,7 +56,7 @@ reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbst
 
 [[exempt_function]]
 path = "src/operators/average.jl"
-functions = ["_throw_no_ka_average_kernel", "_launch_average_engine!", "_throw_no_device_centered_average"]
+functions = ["_launch_average_engine!"]
 reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
 
 [[exempt_function]]
@@ -66,7 +66,7 @@ reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbst
 
 [[exempt_function]]
 path = "src/operators/difference.jl"
-functions = ["_resolve_device_spacing", "_throw_no_ka_stencil_kernel", "_launch_difference_onesided!", "_launch_difference_centered!", "_launch_stencil_engine!"]
+functions = ["_resolve_device_spacing", "_launch_difference_onesided!", "_launch_difference_centered!", "_launch_stencil_engine!"]
 reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
 
 [[exempt_function]]
@@ -76,7 +76,7 @@ reason = "device-only: runs only on device-resident (Metal) data; no Metal backe
 
 [[exempt_function]]
 path = "src/operators/restriction.jl"
-functions = ["_throw_no_ka_projection_kernel", "_launch_restriction!", "_launch_restriction_scatter!", "_launch_restriction_nd!", "_launch_restriction_scatter_nd!", "_device_project!", "_device_scatter_project!"]
+functions = ["_no_ka_error", "_launch_restriction!", "_launch_restriction_scatter!", "_launch_restriction_nd!", "_launch_restriction_scatter_nd!", "_device_project!", "_device_scatter_project!"]
 reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
 
 [[exempt_function]]
