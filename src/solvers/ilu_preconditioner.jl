@@ -68,21 +68,14 @@ function ilu_preconditioner(
         a::_AnyBilinearForm; dirichlet = nothing,
         dirichlet_components = nothing, kwargs...
 )
-    A = assemble(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
-    A = _as_csc(A)
+    A = _assembled_csc(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
     return _ilu_preconditioner(A; kwargs...)
 end
 
 function _ilu_preconditioner(A; kwargs...)
-    _ext_loaded(:BrambleILUZeroExt) && _throw_unsupported_matrix("ilu_preconditioner", A)
-    return error(
-        "ilu_preconditioner requires ILUZero.jl. Add `using ILUZero` before calling this function.",
-    )
+    return _ext_fallback(:BrambleILUZeroExt, "ilu_preconditioner", A)
 end
 
 function _ilu_operator(A; kwargs...)
-    _ext_loaded(:BrambleILUZeroExt) && _throw_unsupported_matrix("preconditioner = :ilu0", A)
-    return error(
-        "preconditioner = :ilu0 requires ILUZero.jl. Add `using ILUZero` before calling this function.",
-    )
+    return _ext_fallback(:BrambleILUZeroExt, "preconditioner = :ilu0", A)
 end

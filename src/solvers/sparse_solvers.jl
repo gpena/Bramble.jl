@@ -112,10 +112,9 @@ function sparse_factorize(
         dirichlet = nothing, dirichlet_components = nothing, kwargs...
 )
     _reject_factorize_symmetrize(:sparse_factorize, kwargs)
-    A = assemble(
+    A = _assembled_csc(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
-    A = _as_csc(A)
     return sparse_factorize(A; solver = solver, sym = sym, kwargs...)
 end
 
@@ -135,6 +134,43 @@ _as_csc(A::Matrix) = sparse(A)
 # "requires X.jl" only when the extension is missing. With it loaded, an argument type its
 # methods do not take (a `Diagonal`, say) gets this error naming the type instead.
 _ext_loaded(ext::Symbol) = Base.get_extension(Bramble, ext) !== nothing
+
+# The form methods of every backend assemble, then convert the matrix with `_as_csc`. With a
+# load, the pair `(A, F)` comes back and only `A` is converted.
+_assembled_csc(a; kwargs...) = _as_csc(assemble(a; kwargs...))
+
+function _assembled_csc(a, l; kwargs...)
+    A, F = assemble(a, l; kwargs...)
+    return _as_csc(A), F
+end
+
+# One reading of the `sym` vocabulary shared by the backends: `:spd`, `:symmetric`,
+# `:unsymmetric` or `:auto` for the accepted spellings (`nothing` is `:auto`, the integers
+# 1, 2 and 0 the first three), `:unknown` otherwise. Each backend keeps its own error text
+# for `:unknown` and its own rule for `:auto`.
+function _normalize_sym(sym)
+    (sym === :spd || sym === :definite || sym == 1) && return :spd
+    (sym === :symmetric || sym == 2) && return :symmetric
+    (sym === :unsymmetric || sym == 0) && return :unsymmetric
+    (sym === :auto || sym === nothing) && return :auto
+    return :unknown
+end
+
+# The `!Sys.isapple()` refusal of the Accelerate entry points.
+function _require_macos()
+    Sys.isapple() || throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
+    return nothing
+end
+
+# The body of the 16 stubs a backend or preconditioner keeps for its extension. With the
+# extension loaded, an argument its methods do not take lands here, and the error names the
+# type. Without it, the error names the package to load. `ext` is the extension module name
+# (`:BrambleSparspakExt`), from which the package name follows.
+function _ext_fallback(ext::Symbol, name::AbstractString, A, expected::AbstractString = "a SparseMatrixCSC")
+    _ext_loaded(ext) && _throw_unsupported_matrix(name, A, expected)
+    pkg = String(ext)[(length("Bramble") + 1):(end - length("Ext"))]
+    return error("$name requires $pkg.jl. Add `using $pkg` before calling this function.")
+end
 
 function _throw_unsupported_matrix(name::String, A, expected::String = "a SparseMatrixCSC")
     throw(ArgumentError("$name takes $expected; got a $(typeof(A))."))
@@ -196,7 +232,7 @@ end
 function refactor!(
         fact::Factorization, a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing
 )
-    A = _as_csc(assemble(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components))
+    A = _assembled_csc(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
     return refactor!(fact, A)
 end
 

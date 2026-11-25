@@ -78,25 +78,14 @@ function amg_preconditioner(
         a::_AnyBilinearForm; dirichlet = nothing,
         dirichlet_components = nothing, kwargs...
 )
-    A = assemble(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
-    A = _as_csc(A)
+    A = _assembled_csc(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
     return _amg_preconditioner(A; kwargs...)
 end
 
 function _amg_preconditioner(A; kwargs...)
-    _ext_loaded(:BrambleAlgebraicMultigridExt) &&
-        _throw_unsupported_matrix("amg_preconditioner", A, "an AbstractMatrix")
-    return error(
-        "amg_preconditioner requires AlgebraicMultigrid.jl. Add `using AlgebraicMultigrid` " *
-        "before calling this function.",
-    )
+    return _ext_fallback(:BrambleAlgebraicMultigridExt, "amg_preconditioner", A, "an AbstractMatrix")
 end
 
 function _amg_operator(A; kwargs...)
-    _ext_loaded(:BrambleAlgebraicMultigridExt) &&
-        _throw_unsupported_matrix("preconditioner = :amg", A, "an AbstractMatrix")
-    return error(
-        "preconditioner = :amg requires AlgebraicMultigrid.jl. Add `using AlgebraicMultigrid` " *
-        "before calling this function.",
-    )
+    return _ext_fallback(:BrambleAlgebraicMultigridExt, "preconditioner = :amg", A, "an AbstractMatrix")
 end

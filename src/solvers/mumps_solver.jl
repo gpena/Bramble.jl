@@ -74,10 +74,9 @@ function mumps_factorize(
         sym = :auto, kwargs...
 )
     _reject_factorize_symmetrize(:mumps_factorize, kwargs)
-    A = assemble(
+    A = _assembled_csc(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
-    A = _as_csc(A)
     return _mumps_factorize(A; sym = sym, kwargs...)
 end
 
@@ -123,10 +122,9 @@ function mumps_solve(
         a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing,
         symmetrize::Bool = false, sym = :auto, kwargs...
 )
-    A, F = assemble(
+    A, F = _assembled_csc(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components, symmetrize = symmetrize
     )
-    A = _as_csc(A)
     u = _mumps_solve(A, F; sym = sym, kwargs...)
     return element(trial_space(a), u)
 end
@@ -149,22 +147,13 @@ See also [`refactor!`](@ref), [`mumps_factorize`](@ref).
 function mumps_refactor! end
 
 function _mumps_factorize(A; kwargs...)
-    _ext_loaded(:BrambleMUMPSExt) && _throw_unsupported_matrix("mumps_factorize", A)
-    return error(
-        "mumps_factorize requires MUMPS.jl. Add `using MUMPS` before calling this function.",
-    )
+    return _ext_fallback(:BrambleMUMPSExt, "mumps_factorize", A)
 end
 
 function _mumps_solve(A, ::Any; kwargs...)
-    _ext_loaded(:BrambleMUMPSExt) && _throw_unsupported_matrix("mumps_solve", A)
-    return error(
-        "mumps_solve requires MUMPS.jl. Add `using MUMPS` before calling this function.",
-    )
+    return _ext_fallback(:BrambleMUMPSExt, "mumps_solve", A)
 end
 
 function mumps_refactor!(::MUMPSFactorization, A)
-    _ext_loaded(:BrambleMUMPSExt) && _throw_unsupported_matrix("mumps_refactor!", A)
-    return error(
-        "mumps_refactor! requires MUMPS.jl. Add `using MUMPS` before calling this function.",
-    )
+    return _ext_fallback(:BrambleMUMPSExt, "mumps_refactor!", A)
 end
