@@ -5,19 +5,22 @@ zero known from the type rather than decided at each point. Two things would fol
 refill would run on stencils of one type and stop boxing without a product being split
 into pieces, and a padded slot would add nothing, so an `Inf` beside padding stays `Inf`
 (#795). This note weighs two designs. It rejects one from a count of the stencil types it
-needs, prototypes the other in two scopes, and measures both scopes against the reference
-tree.
+needs, prototypes the other in two scopes, and measures both against the reference tree.
 
 | Tree | Branch | Commit | Worktree |
 | --- | --- | --- | --- |
 | reference | `alloc-guarantees-2` | `6bf0ea71` (`main` at `a0ca3a40` plus this branch's fixes) | `~/worktrees/Bramble/alloc-guarantees-2` |
 | full prototype | `eval/padding` | `aeff58bc` | detached copy at `~/bramble-scratch/s61-padding/full` |
-| scoped prototype | `eval/padding` | `24b358ca` (tip) | `~/worktrees/Bramble/eval-padding` |
+| scoped prototype | `eval/padding` | `af13c791` (tip; timed at `24b358ca`) | `~/worktrees/Bramble/eval-padding` |
 
-`eval/padding` is local and never pushed. It holds three commits over `6bf0ea71`:
+`eval/padding` is local and never pushed. It holds four commits over `6bf0ea71`:
 `adbc288d` (padding, products whole), `aeff58bc` (the reference's grouping kept, the groups
-summed into one product: the full prototype) and `24b358ca` (padding scoped to products
-holding two restrictions or more). The forms #800 cites at `test/form/bilinear.jl:869` and
+summed into one product: the full prototype), `24b358ca` (padding scoped to products
+holding two restrictions or more) and `af13c791` (that scope without a `BigFloat` weight
+or a grid function scale over a restricted sum: the scoped prototype). `af13c791` builds
+every one of the 30 timed forms exactly as `24b358ca` does (0 B, one product, the same
+pattern and bit-identical values), so the timings taken at `24b358ca` stand for it; it was
+not timed again. The forms #800 cites at `test/form/bilinear.jl:869` and
 `:1543` are at lines 909 and 1577 on the reference.
 
 ## Two designs
@@ -70,8 +73,8 @@ any dimension. The type cost is one `_Padded{T}` weight type per weight type `T`
 
 ## What the prototype changes
 
-Seven files, `git diff 6bf0ea71 24b358ca --shortstat`: +145 −12 (the scope rule is +17 −3
-of that over `aeff58bc`).
+Seven files, `git diff 6bf0ea71 af13c791 --shortstat`: +181 −14 (the scope rules are
++55 −7 of that over `aeff58bc`).
 
 - `src/ast/common.jl`: `_Padded`, its `*` methods, `_pad_mask`, `_present`, `_value`,
   `_padded_all` (a stencil's weights all padded where one is, so the walk indexes one
@@ -89,8 +92,10 @@ of that over `aeff58bc`).
   `_padded_restrictions` marks every unprobed restriction of a source-free operand
   `_PadOutside` (an operand holding a `SourceFunction`, `DiracSource`, source data or a
   `Function` is left unpadded, as it may not be evaluated outside its region). In the
-  scoped prototype (`24b358ca`) a product the split leaves whole is padded only when it
-  holds two restrictions or more (`_restriction_count`).
+  scoped prototype a product the split leaves whole is padded only when it holds two
+  restrictions or more (`_restriction_count`), and no product is padded that carries a
+  non-bits weight (`_bits_weights`) or a grid function scale over a restricted sum
+  (`_scaled_restricted_sum`): those keep the reference's split.
 - `src/assembly/bilinear_traversal.jl`: `_visit_entries` and `_visit_entries_unguarded`
   skip absent entries and add `_value(w)`.
 - `src/assembly/matrix_free.jl`: `_mf_point_weights` strips the masks (compiles; values not
@@ -114,11 +119,23 @@ otherwise. Scripts are under `~/bramble-scratch/s61-padding/`; `repro.jl`, `genu
 | #795 finite corpus (43 forms) | | 43 bit-identical, 43 same stored pattern | 43 bit-identical, 43 same stored pattern |
 | Measured forms below (30), stored pattern | | 30 of 30 the reference's | 30 of 30 |
 | Measured forms below, values | | 26 bit-identical; 4 the reference splits differ by at most 2.2e-16 relative | the same |
+| Every refill pin of `test/form/bilinear.jl` and `test/form/linear_restriction.jl` (`pins.jl` from `padding_zero.md`: 54 pin lines, 476 measurements) | all pass | not run | `af13c791`: 465 equal, 11 lower, 0 higher; no 0 B pin moves |
 
 The four forms that differ (`L3 | R3`, `L5 | L5[1:4]`, `DD(C(u+RL)) | DD(C(v+RB))`,
 `MD(RL)+JD(RB) | MD(RB)+JD(RL)`) are those the reference assembles as several products.
 One product adds each entry's terms in another order. The corpus has no such form, which is
 why it stays bit-identical.
+
+The pin census is the check that rejected options 1 and 2, and it caught `24b358ca` too:
+12 measurements rose. Ten are `BigFloat` forms (lines 1397, 1531, 1548, 1563, 1574, from
+1.4 to 3.6 times their reference bytes, 557808 to 761280 B at line 1574), as each padded
+entry is one more `BigFloat` product; two are the grid-function-scaled sums at line 1119
+(65344 to 91728 B against a 72800 B cap, 85344 to 1110816 B against 91376 B). `af13c791`
+leaves both kinds to the reference's split, and then every pin sits at or under the
+reference's bytes: the 11 lower are line 919 (82848 to 0), line 1657's nine (all to 0) and
+line 1236 (49408 to 47056 B). The census run reports two other failures on `af13c791`,
+the product-count pins at `bilinear.jl:807` and `:809` (`== 2` and `== 9`; one product
+each now).
 
 ## Measurements
 
@@ -217,7 +234,7 @@ Two costs, with different causes:
 
 | Figure | Reference | Full | Scoped |
 | --- | --- | --- | --- |
-| Precompile cache, `.ji` + `.dylib` (bytes) | 146286617 | 146376092 (+0.06 %) | 146358889 (+0.05 %) |
+| Precompile cache, `.ji` + `.dylib` (bytes); scoped column at `24b358ca` | 146286617 | 146376092 (+0.06 %) | 146358889 (+0.05 %) |
 | `using Bramble`, s, 3 rounds | 0.695 (0.695-0.787) | 0.704 (0.698-0.708), ratio 1.013 | 0.702 (0.701-0.703), ratio 1.009 |
 | Invalidations loading Bramble (`uinvalidated`, trees) | 29, 8 | 29, 8 | 29, 8 |
 | Specialisations inferred, :869 group (frames, of them Bramble's) | 3830, 1907 | 3285, 1469 | 3332, 1511 |
@@ -241,8 +258,9 @@ each) and 3 to 7 % more for the other two (the masked stencil types).
   prototype compiles the matrix-free weight read and nothing more.
 - Threaded refill (`assemble!` under `CpuThreaded` or `CpuPolyester`): every warm figure
   above is the default serial policy.
-- `BigFloat` forms (out of #800's scope), Julia 1.14, and the full test suite (only the
-  forms above ran).
+- `af13c791`'s timings and snoop counts (it builds the 30 timed forms as `24b358ca` does),
+  `BigFloat` timings (#800 leaves them out; their bytes are in the pin census), Julia 1.14,
+  and the full test suite (only the forms above and the two pinned test files ran).
 - A finer scope rule (pad only where the reference would box) and block liveness (one
   mask per restricted summand, skipping a whole absent block): either might remove the
   `MD(S4)` and first-call costs, but neither was built. That is a guess.
@@ -254,7 +272,7 @@ first-call and warm figure sits within the reference's spread), neither prototyp
 The full prototype fails warm on the #795 form (+7.9 %) and `MD(S4)` (+18 %). The scoped
 one fails warm on `MD(S4)` (+18 %) and first call on five forms the reference already
 assembles at 0 B (×1.07 to ×2.44). The scoped prototype buys this:
-- every form it was measured on refills at 0 B (16 of them allocated 1728 to 82848 B on
+- no refill pin of the two pinned test files rises, and every timed form refills at 0 B (16 of them allocated 1728 to 82848 B on
   the small meshes; 14 MB, 23 MB and 52 MB a refill on 201x201);
 - the three groups' first calls fall by 17 to 42 %;
 - warm refills of the forms that boxed run up to 5.2 times faster;
@@ -265,7 +283,7 @@ recommendation sets the warm rule aside for `MD(S4)` openly rather than quietly.
 `Inf` is a separate question: the third design to fix it costs about 8 % warm on the
 padded form, so padding is not the way to fix it.
 
-Recommendation: adopt the scoped structural padding (`24b358ca`) for bilinear products holding two restrictions or more, giving up the within-spread warm rule for `MD(S4) | MD(S4)` (+18 % at 201x201 against 14 MB a refill on the reference) and leaving #795's `Inf` as the reference has it
+Recommendation: adopt the scoped structural padding (`af13c791`) for bilinear products of two restrictions or more with bits weights, giving up the within-spread rule for warm `MD(S4) | MD(S4)` (+18 % at 201x201, against 14 MB a refill on the reference) and for the first call of five forms already at 0 B (×1.07 to ×2.44, `DD(R4) | DD(RB)` worst), and leaving #795's `Inf` as the reference has it
 
 ### Implementation plan (subplans for `bramble-plan`)
 
@@ -284,12 +302,16 @@ S1. Padded weights and the walk.
 
 S2. Bilinear products padded and kept whole.
 - OWNS: `src/assembly/bilinear.jl`, `test/form/bilinear.jl`.
-- CHECK: `test/form/bilinear.jl` with every refill pin of the restricted-sum testsets
-  rewritten to `== 0`, plus a `nnz` pin and a parts-equal check on each.
-- EXPECT: every pin 0 B; nnz as on the reference (171, 82, 69, the :1577 set's).
+- CHECK: `test/form/bilinear.jl`, its restricted-sum byte pins of bits-weight forms
+  rewritten to `== 0`, the product-count pins at lines 807 and 809 rewritten to `== 1`,
+  and a `nnz` pin and a parts-equal check on each; then `pins.jl` against the reference.
+- EXPECT: bits-weight pins 0 B; `BigFloat` pins and the line-1119 pins at or under their
+  caps (the reference's bytes); nnz as on the reference (171, 82, 69, the :1577 set's);
+  0 pins higher in the census.
 - WORKER: `opus-high`.
 - WHY: sum the reference's groups into one padded product, which keeps its stored
-  pattern bit for bit. Rejected: dropping the grouping and padding the operand as built,
+  pattern bit for bit, and leave non-bits weights and grid-function-scaled restricted sums
+  to the split, which the census shows box more padded. Rejected: dropping the grouping and padding the operand as built,
   which stored 45 to 99 fewer zeros on seven corpus forms (`adbc288d`) and changes every
   `nnz` pin.
 
