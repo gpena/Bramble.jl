@@ -1277,8 +1277,11 @@ _warm_bytes(f, V, c) = (f(V, c); @allocated f(V, c))
         @test (@inferred _one_side8(V, c)) isa Bramble.BilinearForm
     end
     @test (@inferred _one_side8r(V, r)) isa Bramble.BilinearForm
-    @test _warm_bytes(_one_side8, V, r) == 0
-    @test _warm_bytes(_one_side8r, V, r) == 0
+    # Under `--code-coverage` (PR CI) both build with 240 B, on `main` as well: the
+    # instrumentation stops the fold these rely on. Skipped there, so it shows as broken.
+    covered = Base.JLOptions().code_coverage != 0
+    @test _warm_bytes(_one_side8, V, r) == 0 skip = covered
+    @test _warm_bytes(_one_side8r, V, r) == 0 skip = covered
     # Against the form summed a mixing term at a time.
     M(f) = Matrix(assemble(form(V, V, f)))
     @test Matrix(assemble(_one_side8(V, r))) ≈
