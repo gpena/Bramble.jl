@@ -164,16 +164,6 @@ Base.size(K::KroneckerBlockOperator) = (K.nrows, K.ncols)
 
 # --- The product --------------------------------------------------------------------- #
 
-# `β == 0` overwrites (a `NaN` in `v` does not survive), `β == 1` leaves `v` as it is.
-function _kron_scale!(v, β)
-    if iszero(β)
-        fill!(v, zero(eltype(v)))
-    elseif !isone(β)
-        v .*= β
-    end
-    return v
-end
-
 @inline _kron_blocks_apply!(loc, y, ::Tuple{}, x, α, β) = y
 @inline function _kron_blocks_apply!(loc, y, bs::Tuple, x, α, β)
     b = bs[1]
@@ -205,7 +195,7 @@ function mul!(
     Base.require_one_based_indexing(y, x)
     (length(x) == K.ncols && length(y) == K.nrows) || _throw_kron_block_dimmismatch(K, x, y)
     for r in K.idle
-        _kron_scale!(view(y, r), β)
+        _scale_only!(view(y, r), β)
     end
     return _kron_blocks_apply!(locality(typeof(y)), y, K.blocks, x, α, β)
 end

@@ -56,7 +56,11 @@ end
 function matrix_free_operator(a::GhostBilinearForm; dirichlet = nothing,
         dirichlet_components = nothing, policy = _ghost_policy(a.trial_space))
     labels, _ = _normalize_dirichlet(dirichlet)
-    _check_rows(a, labels)
+    # `matrix_free_operator` applies E_vᵀ A_pad E_u, which a form reading a conflict node of
+    # its trial space in a tested row cannot take: the assembled reduction substitutes per
+    # equation.
+    _reads_conflict(a) && _throw_polygon_conflict("the matrix-free operator")
+    _check_rows(a, labels, dirichlet_components)
     op = matrix_free_operator(a.padded; policy)
     nrows = ndofs(a.test_space)
     mask = falses(labels === nothing ? 0 : nrows)

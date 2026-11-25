@@ -183,17 +183,6 @@ struct _NamedBlock{TrialLeaves <: Tuple, TestLeaves <: Tuple}
     test_component::Int
 end
 
-# jacobian_pattern.jl iterates `blocks` and reads `Block`'s fields off each element; for a
-# `_NamedBlock` they resolve at run time, which is cheap there: the pattern is built once, at
-# setup.
-function Base.getproperty(nb::_NamedBlock, name::Symbol)
-    name === :trial_leaf && return first(getfield(nb, :trial_leaves)[nb.trial_component])
-    name === :test_leaf && return first(getfield(nb, :test_leaves)[nb.test_component])
-    name === :row_offset && return last(getfield(nb, :test_leaves)[nb.test_component])
-    name === :col_offset && return last(getfield(nb, :trial_leaves)[nb.trial_component])
-    return getfield(nb, name)
-end
-
 # Homogeneous on both sides: the runtime index is concrete. Anything else defers the
 # lookup to the static walk.
 @inline _named_block(trial_leaves::Tuple{L, Vararg{L}}, test_leaves::Tuple{M, Vararg{M}},
@@ -468,33 +457,42 @@ end
 `NTuple{N, Int}`. Recurses exactly where [`_collect_region_labels`](@ref) does, so every
 label validated is bound. Labels are read as stored, no boundary alias resolved.
 """
-_bind_marker_ids(op, Ωₕ::AbstractMeshType) = op
+_bind_marker_ids(op, Ωₕ::AbstractMeshType) = _map_regions(r -> _region_ids(r, Ωₕ), op)
 
-function _bind_marker_ids(op::RegionRestriction{D}, Ωₕ::AbstractMeshType) where {D}
-    inner = _bind_marker_ids(op.inner_op, Ωₕ)
-    region = _region_ids(op.region, Ωₕ)
-    return _rebuild_restriction(op, region, inner)
+"""
+    _map_regions(f, op) -> LazyOp
+
+`op` rebuilt with each `RegionRestriction` region `r` replaced by `f(r)`, the restriction
+rebuilt by [`_rebuild_restriction`](@ref) so it keeps its zero stencil. Recurses exactly where
+[`_collect_region_labels`](@ref) does. [`_bind_marker_ids`](@ref) and the matrix-free tagging
+(`_MFBoundRegion`) are its two callers.
+"""
+_map_regions(f::F, op) where {F} = op
+
+function _map_regions(f::F, op::RegionRestriction{D}) where {F, D}
+    inner = _map_regions(f, op.inner_op)
+    return _rebuild_restriction(op, f(op.region), inner)
 end
 
-function _bind_marker_ids(op::UnaryWrapper, Ωₕ::AbstractMeshType)
-    return _rewrap_inner(op, _bind_marker_ids(op.inner_op, Ωₕ))
+function _map_regions(f::F, op::UnaryWrapper) where {F}
+    return _rewrap_inner(op, _map_regions(f, op.inner_op))
 end
 
-function _bind_marker_ids(op::OperatorAdd{D}, Ωₕ::AbstractMeshType) where {D}
-    left = _bind_marker_ids(op.left_op, Ωₕ)
-    right = _bind_marker_ids(op.right_op, Ωₕ)
+function _map_regions(f::F, op::OperatorAdd{D}) where {F, D}
+    left = _map_regions(f, op.left_op)
+    right = _map_regions(f, op.right_op)
     return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
 end
 
-function _bind_marker_ids(op::BilinearProduct{D, W}, Ωₕ::AbstractMeshType) where {D, W}
-    left = _bind_marker_ids(op.left_op, Ωₕ)
-    right = _bind_marker_ids(op.right_op, Ωₕ)
+function _map_regions(f::F, op::BilinearProduct{D, W}) where {F, D, W}
+    left = _map_regions(f, op.left_op)
+    right = _map_regions(f, op.right_op)
     return BilinearProduct{D, W, typeof(left), typeof(right)}(op.inner, left, right)
 end
 
-function _bind_marker_ids(op::LinearProduct{D, W}, Ωₕ::AbstractMeshType) where {D, W}
-    left = _bind_marker_ids(op.left_op, Ωₕ)
-    right = _bind_marker_ids(op.right_op, Ωₕ)
+function _map_regions(f::F, op::LinearProduct{D, W}) where {F, D, W}
+    left = _map_regions(f, op.left_op)
+    right = _map_regions(f, op.right_op)
     return LinearProduct{D, W, typeof(left), typeof(right)}(op.inner, left, right)
 end
 

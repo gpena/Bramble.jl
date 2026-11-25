@@ -210,10 +210,14 @@ end
             ((u, v) -> inner₊ₓ(D₋ₓ(u(3)), D₋ₓ(v(3))),
                 ((3, 3) => ref((u, v) -> inner₊ₓ(D₋ₓ(u), D₋ₓ(v)), W3, W3),))
         )
-        # A named block over these leaves is resolved lazily; the fields
-        # jacobian_pattern.jl reads off it still name the right leaves and offsets.
+        # A named block over these leaves is resolved lazily; `_foldl_blocks` still hands
+        # its consumer a `Block` naming the right leaves and offsets.
         named = innerₕ(TrialFunction{1}()(3), TestFunction{1}()(2))
-        nb = only(blocks(named, leaves, leaves))
+        seen = Bramble._foldl_blocks((), blocks(named, leaves, leaves)) do acc, blk
+            return (acc..., blk)
+        end
+        @test length(seen) == 1
+        nb = only(seen)
         @test nb.trial_leaf === W3 && nb.test_leaf === W2
         @test nb.row_offset == m && nb.col_offset == 2m
 
