@@ -199,26 +199,31 @@ const _ClassValue = Union{Nothing, _MixedComponents, _ComponentClass}
 @inline _class_index(::_ComponentClass{C}) where {C} = C
 @inline _class_index(k) = k
 
-@inline _test_component_class(::IndexedTestFunction{D, C}) where {D, C} = _ComponentClass{C}()
-@inline _test_component_class(op::UnaryWrapper) = _test_component_class(op.inner_op)
-@inline _test_component_class(op::LinearProduct) = _test_component_class(op.right_op)
-@inline _test_component_class(op::BilinearProduct) = _test_component_class(op.right_op)
-@inline function _test_component_class(op::OperatorAdd)
+# One method set over the side (`_TestSide`/`_TrialSide`, block_extract.jl), mirroring
+# `_component_or_nothing`'s recursion; the two names below forward to it.
+@inline function _component_class(::_TestSide, ::IndexedTestFunction{D, C}) where {D, C}
+    return _ComponentClass{C}()
+end
+@inline function _component_class(::_TrialSide, ::IndexedTrialFunction{D, C}) where {D, C}
+    return _ComponentClass{C}()
+end
+@inline _component_class(side, op::UnaryWrapper) = _component_class(side, op.inner_op)
+@inline function _component_class(
+        side::_TestSide, op::Union{LinearProduct, BilinearProduct})
+    return _component_class(side, op.right_op)
+end
+@inline function _component_class(side::_TrialSide, op::BilinearProduct)
+    return _component_class(side, op.left_op)
+end
+@inline function _component_class(side, op::OperatorAdd)
     return _component_combine(
-        _test_component_class(op.left_op), _test_component_class(op.right_op)
+        _component_class(side, op.left_op), _component_class(side, op.right_op)
     )
 end
-@inline _test_component_class(::Any) = nothing
+@inline _component_class(::Any, ::Any) = nothing
 
-@inline _trial_component_class(::IndexedTrialFunction{D, C}) where {D, C} = _ComponentClass{C}()
-@inline _trial_component_class(op::UnaryWrapper) = _trial_component_class(op.inner_op)
-@inline _trial_component_class(op::BilinearProduct) = _trial_component_class(op.left_op)
-@inline function _trial_component_class(op::OperatorAdd)
-    return _component_combine(
-        _trial_component_class(op.left_op), _trial_component_class(op.right_op)
-    )
-end
-@inline _trial_component_class(::Any) = nothing
+@inline _test_component_class(op) = _component_class(_TestSide(), op)
+@inline _trial_component_class(op) = _component_class(_TrialSide(), op)
 
 # Whether the router could route `a` and `b` as one opaque term. So a rewrite may hide
 # `OperatorAdd(a, b)` inside a scale or a grid-function scaling only when this answers
@@ -276,31 +281,7 @@ simplify_ast(op::OperatorScale) = _scale_simplified(op, simplify_ast(op.inner_op
         )
         return _scale_over_sum(op.scalar, inner)
     end
-    return _scale_kept(op, inner)
-end
-
-# The end of `_scale_simplified`, past the distribution: `c * inner` kept as one term, with
-# rules 3 and 4.
-@inline function _scale_kept(op::OperatorScale, inner::LazyOp)
-    # `Integer`, not `Number`, and for the reason `_wrap_scale` spells out: collapsing on the
-    # value of a `Float64` coefficient makes this method's return type depend on a number the
-    # compiler may not know (gpena/Bramble.jl#240).
-    if op.scalar isa Integer
-        iszero(op.scalar) && return _zero_of(inner)
-        isone(op.scalar) && return inner
-    end
-
-    # `c1 * (c2 * A) -> (c1 * c2) * A`, only when both scalars are static numbers: a
-    # `RefValue` on either side can change after construction, so folding through one
-    # would bake in whatever value it happened to hold right now. Type-stable whatever
-    # the values are: both operands' types are known here, so `_wrap_scale` dispatches
-    # on a known type and the product's type follows from them alone. A `Rational` on
-    # either side does not fold either (`_folds`).
-    if inner isa OperatorScale && _folds(op.scalar, inner.scalar)
-        return _wrap_scale(_fold_mul(op.scalar, inner.scalar), inner.inner_op)
-    end
-
-    return inner === op.inner_op ? op : OperatorScale(op.scalar, inner)
+    return _scale_piece(op.scalar, inner, op)
 end
 
 function simplify_ast(op::GridFunctionScale)
@@ -366,7 +347,7 @@ end
 
 # `_distributed_expr`'s expression for the node of type `T` at `path`, and the names its
 # trial and test classes are bound to by the statements pushed to `classes`, bottom-up. A
-# sum's class joins its operands' (`_trial_component_class(::OperatorAdd)`), so each gate
+# sum's class joins its operands' (`_component_class(side, ::OperatorAdd)`), so each gate
 # joins two names already bound, where `_mixes_components` walked the whole subtree again
 # and a left-nested sum of `N` terms held `N²` class calls (gpena/Bramble.jl#1098).
 function _gated_expr!(classes, @nospecialize(T), path, piece, node)
@@ -427,17 +408,35 @@ end
 
 # `simplify_ast(_wrap_scale(c, x))` for an `x` already simplified that is not a sum mixing
 # components: dropped or kept whole for an `Integer` zero or one, a zero kept, a nested
-# static scale folded (rule 4), anything else scaled.
-@inline function _scale_piece(c, x::LazyOp)
+# static scale folded (rule 4), anything else scaled. Serves `_scale_simplified`, past its
+# distribution, and every piece `_scale_over_sum` leaves. `orig`, the node being simplified,
+# is returned itself when `x` is its operand unchanged (`_scale_kept_or_rebuilt`).
+@inline function _scale_piece(c, x::LazyOp, orig = nothing)
+    # `Integer`, not `Number`, and for the reason `_wrap_scale` spells out: collapsing on the
+    # value of a `Float64` coefficient makes this method's return type depend on a number the
+    # compiler may not know (gpena/Bramble.jl#240).
     if c isa Integer
         iszero(c) && return _zero_of(x)
         isone(c) && return x
     end
     x isa ZeroOperator && return x
+    # `c1 * (c2 * A) -> (c1 * c2) * A`, only when both scalars are static numbers: a
+    # `RefValue` on either side can change after construction, so folding through one
+    # would bake in whatever value it happened to hold right now. Type-stable whatever
+    # the values are: both operands' types are known here, so `_wrap_scale` dispatches
+    # on a known type and the product's type follows from them alone. A `Rational` on
+    # either side does not fold either (`_folds`).
     if x isa OperatorScale && _folds(c, x.scalar)
         return _wrap_scale(_fold_mul(c, x.scalar), x.inner_op)
     end
-    return OperatorScale(c, x)
+    return _scale_kept_or_rebuilt(c, x, orig)
+end
+
+# `orig` itself rather than a rebuilt copy, whose type parameters would be re-inferred from
+# the fields, so `simplify_ast` returns a scale whose operand it left alone unchanged.
+@inline _scale_kept_or_rebuilt(c, x, ::Nothing) = OperatorScale(c, x)
+@inline function _scale_kept_or_rebuilt(c, x, orig::OperatorScale)
+    return x === orig.inner_op ? orig : OperatorScale(c, x)
 end
 
 # `simplify_ast(GridFunctionScale(g, x))` for a sum `x` already simplified whose operands mix

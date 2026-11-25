@@ -6,33 +6,41 @@
 # `block_of` converts to a block coordinate `(trial, test)` or validates. Routing by
 # leaf index supports arbitrary composite function spaces.
 
-"""
-    test_component_or_nothing(op) -> Union{Int, Nothing}
+# The two sides of a form, as singletons the component classifiers dispatch on: each
+# classifier family is one method set over the side. `_component_class`
+# (ast/simplifier.jl) reads them too.
+struct _TestSide end
+struct _TrialSide end
 
-The component `op` is written against, or `nothing` when it names none.
-
-Used when assembling composite right-hand sides, where a term built from an indexed test
-function belongs to one block while a term built from an unindexed one belongs to all of them.
-Written as a query rather than catching an exception because it is evaluated once per
-term per assembly in time-stepping loops.
-"""
-test_component_or_nothing(op::IndexedTestFunction) = _component_index(op)
-# Every node wrapping one operand answers what that operand answers. One method instead of
-# thirteen registrations (gpena/Bramble.jl#52); see [`UnaryWrapper`](@ref).
-test_component_or_nothing(op::UnaryWrapper) = test_component_or_nothing(op.inner_op)
-test_component_or_nothing(op::LinearProduct) = test_component_or_nothing(op.right_op)
-test_component_or_nothing(op::BilinearProduct) = test_component_or_nothing(op.right_op)
+# One method set for the throwing query, over the side. Every node wrapping one operand
+# answers what that operand answers: one method instead of thirteen registrations
+# (gpena/Bramble.jl#52); see [`UnaryWrapper`](@ref).
+_component_or_nothing(::_TestSide, op::IndexedTestFunction) = _component_index(op)
+_component_or_nothing(::_TrialSide, op::IndexedTrialFunction) = _component_index(op)
+function _component_or_nothing(side, op::UnaryWrapper)
+    return _component_or_nothing(side, op.inner_op)
+end
+# A product answers for its test operand, and for its trial operand when it has one: a
+# `LinearProduct` has no trial side, so on the trial side it names none.
+function _component_or_nothing(
+        side::_TestSide, op::Union{LinearProduct, BilinearProduct})
+    return _component_or_nothing(side, op.right_op)
+end
+function _component_or_nothing(side::_TrialSide, op::BilinearProduct)
+    return _component_or_nothing(side, op.left_op)
+end
 # A sum inside one inner product, `innerₕ(uₕ, v + 2 * D₋ₓ(v) - Mₓ(v))`, is still one
 # term of the form, and every test leaf in it names the same component or none. So the
 # component of a sum is the component its sides agree on.
 #
 # Without this check the fallback returned `nothing` and the term broadcast to every block.
-function test_component_or_nothing(op::OperatorAdd)
-    l = test_component_or_nothing(op.left_op)
-    r = test_component_or_nothing(op.right_op)
+function _component_or_nothing(side, op::OperatorAdd)
+    l = _component_or_nothing(side, op.left_op)
+    r = _component_or_nothing(side, op.right_op)
     l === r && return l
     return _throw_mixed_components(l, r)
 end
+_component_or_nothing(::Any, ::Any) = nothing
 
 # Sides naming different components cannot be one term of one block:
 # `innerₕ(uₕ, v(1) + v(2))` is ill-formed, so an error is raised.
@@ -46,7 +54,17 @@ end
     )
 end
 
-test_component_or_nothing(::Any) = nothing
+"""
+    test_component_or_nothing(op) -> Union{Int, Nothing}
+
+The component `op` is written against, or `nothing` when it names none.
+
+Used when assembling composite right-hand sides, where a term built from an indexed test
+function belongs to one block while a term built from an unindexed one belongs to all of them.
+Written as a query rather than catching an exception because it is evaluated once per
+term per assembly in time-stepping loops.
+"""
+test_component_or_nothing(op) = _component_or_nothing(_TestSide(), op)
 
 """
     trial_component_or_nothing(op) -> Union{Int, Nothing}
@@ -59,18 +77,7 @@ component from each side. A term naming neither is the same integrand in every d
 block; a term naming both is one block; and a term naming one but not the other is not
 something the mathematics can express, so it is an error rather than a guess.
 """
-trial_component_or_nothing(op::IndexedTrialFunction) = _component_index(op)
-trial_component_or_nothing(op::UnaryWrapper) = trial_component_or_nothing(op.inner_op)
-trial_component_or_nothing(op::BilinearProduct) = trial_component_or_nothing(op.left_op)
-
-function trial_component_or_nothing(op::OperatorAdd)
-    l = trial_component_or_nothing(op.left_op)
-    r = trial_component_or_nothing(op.right_op)
-    l === r && return l
-    return _throw_mixed_components(l, r)
-end
-
-trial_component_or_nothing(::Any) = nothing
+trial_component_or_nothing(op) = _component_or_nothing(_TrialSide(), op)
 
 """
     block_of(term, nblocks_trial, nblocks_test) -> Union{Nothing, Tuple{Int, Int}}
