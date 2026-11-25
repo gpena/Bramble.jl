@@ -108,39 +108,17 @@ function Bramble._allocate_from_pattern(
 end
 
 # The row-major mirror of `_scatter_position(A::SparseMatrixCSC, row, col)`
-# (bilinear_traversal.jl): a linear scan of the row's segment when it holds few entries, a
-# binary search otherwise, relying on `SparseMatrixCSR`'s own invariant that `colval` is
-# sorted within each row (guaranteed by how `_allocate_from_pattern` above builds it, through
-# the same `sparse` combine-and-sort `SparseMatrixCSC` gets). The row bounds are converted
-# first, so the position is an `Int` for any index type.
+# (bilinear_traversal.jl): the same scan with row and column swapped, so it hands the
+# `rowptr`/`colval` pair to `Bramble._csc_position` instead of repeating it. That search
+# relies on `SparseMatrixCSR`'s own invariant that `colval` is sorted within each row
+# (guaranteed by how `_allocate_from_pattern` above builds it, through the same `sparse`
+# combine-and-sort `SparseMatrixCSC` gets). `_csc_position` reads its pointer array under
+# `@inbounds`, so the two `rowptr` bounds are checked here first. The position is an `Int`
+# for any index type.
 @inline function Bramble._scatter_position(A::SparseMatrixCSR{1}, row::Int, col::Int)
     rowptr = A.rowptr
-    colval = A.colval
-    p1 = Int(rowptr[row])
-    p2 = Int(rowptr[row + 1]) - 1
-
-    if (p2 - p1) < 32
-        idx = p1
-        @inbounds while idx <= p2
-            colval[idx] == col && return idx
-            idx += 1
-        end
-    else
-        lo = p1
-        hi = p2
-        @inbounds while lo <= hi
-            mid = (lo + hi) >>> 1
-            mid_col = colval[mid]
-            if mid_col < col
-                lo = mid + 1
-            elseif mid_col > col
-                hi = mid - 1
-            else
-                return mid
-            end
-        end
-    end
-    return 0
+    checkbounds(rowptr, row:(row + 1))
+    return Bramble._csc_position(rowptr, A.colval, col, row)
 end
 
 @inline function Bramble._scatter_add!(A::SparseMatrixCSR{1}, pos::Integer, val)
