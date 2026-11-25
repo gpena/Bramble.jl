@@ -939,15 +939,9 @@ function resolve_ast(op::InterpolationNode{D, S, OpType, Side}) where {D, S, OpT
     return InterpolationNode{D, S, typeof(inner), Side}(op.src_space, inner, op.outside)
 end
 
-@inline function component(
-        op::InterpolationNode{D, S, OpType, Side}, i::Int
-) where {D, S, OpType, Side}
-    inner = component(op.inner_op, i)
-    return InterpolationNode{D, S, typeof(inner), Side}(op.src_space, inner, op.outside)
-end
-
-# `_collect_region_labels` for `InterpolationNode` comes from its `UnaryWrapper` membership
-# (assembly/block_extract.jl); it recursed the same way and needed no override.
+# `_collect_region_labels` (assembly/block_extract.jl) and `component` (ast/component.jl)
+# for `InterpolationNode` come from its `UnaryWrapper` membership: each recursed the same
+# way and needed no override.
 
 # The reach on the mesh being walked is the inner leaf's (a single point). The columns this
 # node names are on the other mesh and are not offsets, so they have no place in an

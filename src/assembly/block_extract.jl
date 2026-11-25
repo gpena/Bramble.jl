@@ -519,11 +519,9 @@ end
     label -> _region_ids(label, Ωₕ), labels)
 
 # A `UnaryWrapper` rebuilt around `inner`: the type parameter its `inner_op` field is declared
-# with is replaced by `typeof(inner)`, every other field and parameter kept. Generated from
-# the type alone, so one method serves every wrapper, and an `inner` of the operand's own
-# type returns `op` itself.
-@generated function _rewrap_inner(op::T, inner::I) where {T, I}
-    fieldtype(T, :inner_op) === I && return :op
+# with is replaced by `typeof(inner)`, every other field and parameter kept. The expression
+# is built from the types alone, so one method serves every wrapper.
+function _rewrap_call(T, I)
     wrapper = Base.typename(T).wrapper
     decl = fieldtype(Base.unwrap_unionall(wrapper), :inner_op)
     params = Any[T.parameters...]
@@ -532,4 +530,18 @@ end
         f === :inner_op ? :inner : :(getfield(op, $(QuoteNode(f))))
     end
     return :($(wrapper{params...})($(args...)))
+end
+
+# `op` rebuilt around `inner`, or `op` itself when `inner` has the operand's own type. A pass
+# that changes values without changing types (`_retarget`, `_rebind`, `component`) needs
+# `_rewrap_value` instead.
+@generated function _rewrap_inner(op::T, inner::I) where {T, I}
+    return fieldtype(T, :inner_op) === I ? :op : _rewrap_call(T, I)
+end
+
+# `op` rebuilt around `inner`, or `op` itself when `inner` is its operand (`===`). Both
+# branches have one type, so inference is the same as for the rebuild alone.
+@generated function _rewrap_value(op::T, inner::I) where {T, I}
+    fieldtype(T, :inner_op) === I || return _rewrap_call(T, I)
+    return :(inner === op.inner_op ? op : $(_rewrap_call(T, I)))
 end

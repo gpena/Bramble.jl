@@ -178,7 +178,7 @@ end
 function _dterm(op::Union{TappedNode, ShiftNode}, w::_JFWalk)
     _check_other_fields(op, w, (:inner_op,), "a coefficient in the node's own data")
     d = _dterm(op.inner_op, w)
-    return d === nothing ? nothing : _rebuilt_around(op, d)
+    return d === nothing ? nothing : _rewrap_value(op, d)
 end
 
 # Unprobed (`()` outside the region): the zero stencil `form` may have stored is typed for

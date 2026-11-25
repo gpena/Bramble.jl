@@ -101,10 +101,7 @@ end
 
 # Not `_rewrap_inner`: it returns `op` for an operand of the same type, and `old => new` of
 # one type changes the operand's value only.
-function _rebind(op::UnaryWrapper, old, new)
-    inner = _rebind(op.inner_op, old, new)
-    return inner === op.inner_op ? op : _rebuilt_around(op, inner)
-end
+_rebind(op::UnaryWrapper, old, new) = _rewrap_value(op, _rebind(op.inner_op, old, new))
 
 function _rebind(op::OperatorAdd, old, new)
     left = _rebind(op.left_op, old, new)
