@@ -104,6 +104,13 @@ function GhostGridSpace(P::ScalarGridSpace, E::AbstractMatrix, d::AbstractVector
         _dofs_are_grid_function(G, Et, d, td), nothing)
 end
 
+# The degree of freedom whose unit row is padded point `p`: the row of the single entry of
+# column `p` of `Eᵀ` when that entry is a one, else 0.
+@inline function _unit_dof(Et::SparseMatrixCSC, p::Int)::Int
+    cp, nzv = SparseArrays.getcolptr(Et), nonzeros(Et)
+    return cp[p + 1] - cp[p] == 1 && isone(nzv[cp[p]]) ? rowvals(Et)[cp[p]] : 0
+end
+
 # Whether the first `npoints` degrees of freedom of a closure are the physical nodes' values,
 # in the mesh's order, so that a vector of them is a grid function there, with the ghosts
 # beyond: the padded row of each physical node `k` is the unit row of degree of freedom `k`
@@ -114,10 +121,8 @@ function _dofs_are_grid_function(G::GhostMesh, Et::SparseMatrixCSC, d::AbstractV
         td)
     td === nothing && all(iszero, Array(d)) || return false
     plin = LinearIndices(npoints(G, Tuple))
-    cp, rv, nzv = SparseArrays.getcolptr(Et), rowvals(Et), nonzeros(Et)
     for (k, J) in enumerate(physical_indices(G))
-        i = plin[J]
-        (cp[i + 1] - cp[i] == 1 && rv[cp[i]] == k && isone(nzv[cp[i]])) || return false
+        _unit_dof(Et, plin[J]) == k || return false
     end
     return true
 end
@@ -157,16 +162,15 @@ function _ghost_update(be, G::GhostMesh{D}, Et::SparseMatrixCSC, d::AbstractVect
     dh = td === nothing ? Array(d) : zeros(eltype(d), length(d))
     affine = _affine_support(d, td)
     own = zeros(Int, size(Et, 1))           # the vector index of each degree of freedom
-    alone(i) = cp[i + 1] - cp[i] == 1 && isone(nzv[cp[i]]) ? rv[cp[i]] : 0
     for (k, J) in enumerate(phys)
-        j = alone(plin[J])
+        j = _unit_dof(Et, plin[J])
         (j != 0 && own[j] == 0) && (own[j] = k)
     end
     gpts = [plin[_ghost_point(G, g)] for g in 1:ng]
     eliminated = Int[]
     kept_affine = false
     for g in 1:ng
-        j = alone(gpts[g])
+        j = _unit_dof(Et, gpts[g])
         if j != 0 && own[j] == 0
             own[j] = np + g
             kept_affine |= affine[gpts[g]]
