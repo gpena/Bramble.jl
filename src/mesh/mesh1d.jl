@@ -172,7 +172,11 @@ end
 @inline function _computed_uniform(s::Mesh1DState)
     p = host_points(s)
     mag = max(abs(first(p)), abs(last(p)))
-    return _uniform_at_default_tol(host_spacings(s), eltype(s), mag)
+    h = host_spacings(s)
+    n = length(h)
+    n <= 1 && return true
+    h_ref = h[1]
+    return _uniform_scan(h, h_ref, _default_is_uniform_tol(eltype(s), h_ref, n, mag), n)
 end
 
 @inline _marker_words(Ωₕ::_Mesh1DLike) = _st(Ωₕ).words
@@ -1053,7 +1057,7 @@ _launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_
 end
 
 # Device counterpart of the method above, reached only for the two cases `_mesh` does not
-# route through the fused `_uniform_mesh1d_init!` kernel: a single-point mesh and a
+# route through the fused `_launch_uniform_mesh1d_init!` kernel: a single-point mesh and a
 # non-uniform one. `unif` and `backend` are carried to keep this method's signature distinct
 # from the `Array` one above, since with `unif` dropped a three-argument device method would
 # be ambiguous with it. Past the single-point guard `unif` is always `false`. The fill runs
@@ -1165,26 +1169,6 @@ function half_spacing!(x::AbstractVector, Ωₕ)
     return nothing
 end
 
-# Fused device counterpart of `_points!` + `spacing!` + `half_points!` + `half_spacing!`
-# together (gpena/Bramble.jl#303): one kernel launch fills `pts`, `half_pts`, `spacings`
-# and `half_spacings` from `a`, `b`, `h` and `n` alone. `_mesh` below is the only caller, before
-# a `Mesh1D` exists to pass in, which is why this takes the raw arrays rather than `Ωₕ`.
-@inline function _uniform_mesh1d_init!(
-        pts::AbstractVector,
-        half_pts,
-        spacings,
-        half_spacings,
-        a,
-        b,
-        h,
-        n::Int,
-        backend
-)
-    dev = ka_device(backend)
-    _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, b, h, n, dev)
-    return nothing
-end
-
 # Fused device counterpart of `spacing!` + `half_points!` + `half_spacing!` together
 # (gpena/Bramble.jl#305): one kernel launch fills `spacings`, `half_pts` and
 # `half_spacings` from `pts` alone, over `1:(n + 1)` work items, reading only each thread's
@@ -1273,7 +1257,7 @@ function _mesh(
         S = eltype(pts)
         a, b = convert.(S, extrema(set))
         h = (b - a) / (n_points - 1)
-        _uniform_mesh1d_init!(
+        _launch_uniform_mesh1d_init!(
             pts,
             _half_pts,
             _spacings,
@@ -1282,7 +1266,7 @@ function _mesh(
             b,
             h,
             n_points,
-            backend
+            ka_device(backend)
         )
     elseif pts isa Array
         # Populate the vector with coordinates, either uniformly or non-uniformly.
@@ -1321,17 +1305,17 @@ function _mesh(
     # (gpena/Bramble.jl#636); `all` reduces on the device for a device vector.
     if !all(isfinite, half_points(mesh))
         a, b = extrema(set)
-        _throw_half_point_overflow(n_points, a, b, eltype(pts))
+        _throw_mesh_overflow("half-point", n_points, a, b, eltype(pts))
     end
     # A spacing `b - a` overflows too, with both points finite (gpena/Bramble.jl#867).
     if !all(isfinite, spacings(mesh))
         a, b = extrema(set)
-        _throw_spacing_overflow(n_points, a, b, eltype(pts))
+        _throw_mesh_overflow("spacing", n_points, a, b, eltype(pts))
     end
     # A cell measure sums two finite half-spacings and overflows on its own (#970).
     if !all(isfinite, half_spacings(mesh))
         a, b = extrema(set)
-        _throw_cell_measure_overflow(n_points, a, b, eltype(pts))
+        _throw_mesh_overflow("cell measure", n_points, a, b, eltype(pts))
     end
 
     # Finally, apply the domain markers to the mesh points.
@@ -1339,21 +1323,10 @@ function _mesh(
     return mesh
 end
 
-@noinline function _throw_half_point_overflow(n, a, b, T)
-    msg = "a mesh of $n points in [$a, $b] with eltype $T makes a half-point overflow " *
+# `what` names the quantity that overflowed: "half-point", "spacing" or "cell measure".
+@noinline function _throw_mesh_overflow(what, n, a, b, T)
+    msg = "a mesh of $n points in [$a, $b] with eltype $T makes a $what overflow " *
           "$T. Use a wider eltype"
-    throw(ArgumentError(msg))
-end
-
-@noinline function _throw_spacing_overflow(n, a, b, T)
-    msg = "a mesh of $n points in [$a, $b] with eltype $T makes a spacing overflow " *
-          "$T. Use a wider eltype"
-    throw(ArgumentError(msg))
-end
-
-@noinline function _throw_cell_measure_overflow(n, a, b, T)
-    msg = "a mesh of $n points in [$a, $b] with eltype $T makes a cell measure " *
-          "overflow $T. Use a wider eltype"
     throw(ArgumentError(msg))
 end
 
@@ -1381,17 +1354,9 @@ end
 # mutation, so a failed refinement leaves the mesh unchanged; a device vector is read once
 # through a host copy.
 function _refined_points(Ωₕ::Mesh1D)
-    # Do nothing if the mesh is just a single point.
-    if is_collapsed(Ωₕ)
-        return nothing
-    end
+    _nothing_to_refine(Ωₕ) && return nothing
 
     N_old = npoints(Ωₕ)
-
-    # No intervals to refine if there's only one point.
-    if N_old <= 1
-        return nothing
-    end
 
     # Calculate the number of points in the new, refined mesh.
     N_new = 2 * N_old - 1
@@ -1522,33 +1487,29 @@ end
 
 function Base.show(io::IO, ::MIME"text/plain", Ωₕ::Mesh1D{BT, CI, VT, T}) where {BT, CI, VT, T}
     return show_block(io) do io
-        return _show_mesh1d_detailed(io, Ωₕ)
+        pp = PrettyPrinter(io)
+
+        n_pts = npoints(Ωₕ)
+        topodim = topo_dim(Ωₕ)
+        collapsed = is_collapsed(Ωₕ)
+
+        # Header
+        print_mesh_header(pp, "Mesh1D", 1, T)
+        println(io)
+
+        # Summary line
+        print_mesh_summary(pp, n_pts, topodim, collapsed)
+
+        # Domain information
+        print_mesh_domain_info(pp, set(Ωₕ))
+
+        # Spacing information
+        if !collapsed
+            print_mesh_spacing_info(pp, is_uniform(Ωₕ), hₘₐₓ(Ωₕ))
+        end
+
+        # Markers information
+        print_mesh_markers(pp, markers(Ωₕ))
+        return nothing
     end
-end
-
-function _show_mesh1d_detailed(io::IO, Ωₕ::Mesh1D{BT, CI, VT, T}) where {BT, CI, VT, T}
-    pp = PrettyPrinter(io)
-
-    n_pts = npoints(Ωₕ)
-    topodim = topo_dim(Ωₕ)
-    collapsed = is_collapsed(Ωₕ)
-
-    # Header
-    print_mesh_header(pp, "Mesh1D", 1, T)
-    println(io)
-
-    # Summary line
-    print_mesh_summary(pp, n_pts, topodim, collapsed)
-
-    # Domain information
-    print_mesh_domain_info(pp, set(Ωₕ))
-
-    # Spacing information
-    if !collapsed
-        print_mesh_spacing_info(pp, is_uniform(Ωₕ), hₘₐₓ(Ωₕ))
-    end
-
-    # Markers information
-    print_mesh_markers(pp, markers(Ωₕ))
-    return nothing
 end

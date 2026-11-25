@@ -278,20 +278,18 @@ end
 function _close_grid!(subs::NTuple{2, Mesh1D}, regs::Tuple{Any, Vararg}, idxs)
     ids = map(identifier, regs)
     nls = count(P -> P isa LevelSet, ids)
-    nls == 0 && return _close_polygon_grid!(subs, ids, regs, idxs)
+    if nls == 0
+        xs, ys = _grid_closure(ids, host_points(subs[1]), host_points(subs[2]))
+        _set_points!(subs[1], xs)
+        _set_points!(subs[2], ys)
+        return generate_indices((length(xs), length(ys))), map(_ -> nothing, regs)
+    end
     (nls == 1 && length(ids) == 1) || _throw_levelset_markers(nls, length(ids) - nls)
     xs, ys = host_points(subs[1]), host_points(subs[2])
     X, Y, P = _levelset_grid(only(ids).φ, xs, ys)
     _set_points!(subs[1], X)
     _set_points!(subs[2], Y)
     return generate_indices((length(X), length(Y))), (P,)
-end
-
-function _close_polygon_grid!(subs, ids, regs, idxs)
-    xs, ys = _grid_closure(ids, host_points(subs[1]), host_points(subs[2]))
-    _set_points!(subs[1], xs)
-    _set_points!(subs[2], ys)
-    return generate_indices((length(xs), length(ys))), map(_ -> nothing, regs)
 end
 
 @noinline function _throw_levelset_markers(nls, npoly)
@@ -758,32 +756,28 @@ function Base.show(
         io::IO, ::MIME"text/plain", Ωₕ::MeshnD{D, BT, CI, SM, T}
 ) where {D, BT, CI, SM, T}
     return show_block(io) do io
-        return _show_meshnd_detailed(io, Ωₕ)
+        pp = PrettyPrinter(io)
+
+        npts_tuple = npoints(Ωₕ, Tuple)
+        n_total = npoints(Ωₕ)
+        topodim = topo_dim(Ωₕ)
+
+        # Check if all dimensions are collapsed (topological dimension is 0)
+        collapsed = (topodim == 0)
+
+        print_mesh_header(pp, "MeshnD", D, T)
+        println(io)
+
+        print_mesh_summary(pp, npts_tuple, topodim, collapsed)
+
+        print_mesh_domain_info(pp, set(Ωₕ))
+
+        if !collapsed
+            uniform_tuple = ntuple(i -> is_uniform(Ωₕ(i)), Val(D))
+            print_mesh_spacing_info(pp, uniform_tuple, hₘₐₓ(Ωₕ))
+        end
+
+        print_mesh_markers(pp, markers(Ωₕ))
+        return nothing
     end
-end
-
-function _show_meshnd_detailed(io::IO, Ωₕ::MeshnD{D, BT, CI, SM, T}) where {D, BT, CI, SM, T}
-    pp = PrettyPrinter(io)
-
-    npts_tuple = npoints(Ωₕ, Tuple)
-    n_total = npoints(Ωₕ)
-    topodim = topo_dim(Ωₕ)
-
-    # Check if all dimensions are collapsed (topological dimension is 0)
-    collapsed = (topodim == 0)
-
-    print_mesh_header(pp, "MeshnD", D, T)
-    println(io)
-
-    print_mesh_summary(pp, npts_tuple, topodim, collapsed)
-
-    print_mesh_domain_info(pp, set(Ωₕ))
-
-    if !collapsed
-        uniform_tuple = ntuple(i -> is_uniform(Ωₕ(i)), Val(D))
-        print_mesh_spacing_info(pp, uniform_tuple, hₘₐₓ(Ωₕ))
-    end
-
-    print_mesh_markers(pp, markers(Ωₕ))
-    return nothing
 end

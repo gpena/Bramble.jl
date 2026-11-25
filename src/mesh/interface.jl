@@ -208,12 +208,9 @@ end
 # The face `label` names, as a fresh `BitVector` over the mesh points.
 @noinline function _geometric_face_bits(Ωₕ::AbstractMeshType{D}, label::Symbol) where {D}
     axis, side = _face_of_symbol(Val(D), label)
-    face = _face_indices(Ωₕ, axis, side)
     lin = LinearIndices(indices(Ωₕ))
     bits = falses(length(lin))
-    for I in face
-        @inbounds bits[lin[I]] = true
-    end
+    _mark_indices!(bits, lin, _face_indices(Ωₕ, axis, side))
     return bits
 end
 

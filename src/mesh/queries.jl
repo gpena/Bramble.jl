@@ -31,22 +31,11 @@ its [`Mesh1DState`](@ref) stores, computed whenever the points change
 always rescans the spacings.
 """
 function is_uniform(Ωₕ::AbstractMeshType{1}; tol = nothing)
-    tol === nothing && return _stored_uniform(Ωₕ)
+    tol === nothing && return _walk_mesh(Ωₕ(1)).uniform
     h = host_spacings(Ωₕ)
     n = length(h)
     n <= 1 && return true
     return _uniform_scan(h, h[1], tol, n)
-end
-
-@inline _stored_uniform(Ωₕ::AbstractMeshType{1}) = _walk_mesh(Ωₕ(1)).uniform
-
-# The default-tolerance answer for the host spacings `h` of a mesh of element type `T` whose
-# end points have magnitude at most `mag`: what a `Mesh1DState` stores as `uniform`.
-@inline function _uniform_at_default_tol(h, ::Type{T}, mag) where {T}
-    n = length(h)
-    n <= 1 && return true
-    h_ref = h[1]
-    return _uniform_scan(h, h_ref, _default_is_uniform_tol(T, h_ref, n, mag), n)
 end
 
 @inline function _uniform_scan(h, h_ref, atol, n)
@@ -215,13 +204,6 @@ function locate_cell end
 
 @inline function locate_cell(Ωₕ::AbstractMeshType{1}, x::Tuple{Real})
     x1 = x[1]
-    return locate_cell(Ωₕ, x1)
-end
-
-@inline function locate_cell(Ωₕ::AbstractMeshType{1}, x::AbstractVector)
-    @boundscheck length(x) == 1 ||
-                 throw(DimensionMismatch("locate_cell expected a length-1 vector, got length $(length(x))"))
-    x1 = @inbounds x[1]
     return locate_cell(Ωₕ, x1)
 end
 
