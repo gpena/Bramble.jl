@@ -86,6 +86,9 @@ println("REINFER_TOTAL=", length(mis))
 for mi in mis
     println("  ", first(string(mi), 160))
 end
+for mi in bad
+    println("  BAD ", mi)
+end
 println("REINFER_POLYESTER=", length(bad))
 
 Wm = gridspace(mesh(domain(X, :dir => boundary_symbols(X)), n, nu;
