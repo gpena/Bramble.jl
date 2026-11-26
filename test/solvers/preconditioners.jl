@@ -355,8 +355,11 @@ end
         end
     end
 
-    # Float32 and Float64 keep their own start-vector draw, pinned bitwise; a type `Random`
-    # cannot sample (a `ForwardDiff.Dual`, #1169) draws in Float64, so the preconditioner
+    # Float32 and Float64 keep their own start-vector draw: the first value of the seed
+    # `max_eigenvalue_estimate` uses is pinned bitwise per type, and the estimates are pinned
+    # to a tolerance (20 products round by Julia version and thread count, 1.14 moves them
+    # by 8e-16 and 1 ulp) that the other type's draw misses by 3e-3. A type `Random` cannot
+    # sample (a `ForwardDiff.Dual`, #1169) draws in Float64, so the preconditioner
     # differentiates through its λmax estimate and matches a central difference.
     @testset "chebyshev: λmax under Float32, Dual" begin
         function est(T)
@@ -364,8 +367,10 @@ end
             a = form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
             return max_eigenvalue_estimate(matrix_free_operator(a))
         end
-        @test est(Float64) === 8.422059085350336
-        @test est(Float32) === 8.448237f0
+        @test rand(Random.Xoshiro(327), Float64) === 0.014907217101196135
+        @test rand(Random.Xoshiro(327), Float32) === 0.014907181f0
+        @test isapprox(est(Float64), 8.422059085350336; rtol = 1e-14)
+        @test isapprox(est(Float32), 8.448237f0; rtol = 4 * eps(Float32))
         for (dims, unif) in (((17, 17), true), ((9, 9), false))
             Random.seed!(1234)
             W = gridspace(mesh(domain(interval(0.0, 1.0) × interval(0.0, 1.0)), dims, (unif, unif)))

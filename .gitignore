@@ -154,3 +154,5 @@ graphify-out/
 # v4.2.0 DI against direct AD calls (gpena/Bramble.jl#1117)
 !benchmark/ad_di_vs_direct.jl
 !benchmark/di_upstream_mwe.jl
+# CpuThreaded bytes per path (gpena/Bramble.jl#436)
+!benchmark/cputhreaded_bytes.jl

@@ -549,11 +549,27 @@ end
 # form mixing on both sides took 39 s to compile at 16 terms (gpena/Bramble.jl#1098). A
 # run-time component index leaves a gate unfolded: each piece then meets a `Union` of
 # splits, and `form` infers the `Union` it did.
-@generated function _product_over_sums(op::BilinearProduct, left, right)
-    return quote
+#
+# An `Integer` scale (`3 * v`) wraps a piece by its value (`_wrap_scale`), so these two
+# bodies infer their sum only when `_bilinear_form` propagates constants into them. Julia
+# 1.14 does not do that for an inlineable body: it runs semi-concrete interpretation
+# instead, which kept only the last piece's type, so `form` widened to an abstract
+# `OperatorAdd` (gpena/Bramble.jl#1282). There the bodies are `:noinline`, so 1.14 skips
+# that pass, and `@constprop :aggressive` makes constants reach them. On 1.13 the same
+# change cost inference: it semi-concretely interprets the caller, `simplify_ast`, whose
+# calls to bodies left out of line then lost the constants, and an eight-term sum beside
+# one scaled term widened. So 1.13 keeps them inlined, as before.
+@static if VERSION >= v"1.14-"
+    _product_inlining(ex) = Expr(:block, Expr(:meta, :noinline), ex)
+else
+    _product_inlining(ex) = Expr(:block, Expr(:meta, :inline), ex)
+end
+Base.@constprop :aggressive @generated function _product_over_sums(
+        op::BilinearProduct, left, right)
+    return _product_inlining(quote
         ls = _mixing_split(left)
         $(_distributed_expr(right, :right, r -> :(_product_over_split(op, ls, $r))))
-    end
+    end)
 end
 
 # The pieces `_distributed_expr` would leave in `x`, as a `_Split` at each sum it distributes
@@ -571,9 +587,11 @@ end
 end
 
 # `_distributed_expr` over the trial side's split `ls` for one piece `r` of the test side,
-# without gates: every piece of `ls` meets `r` in `_bilinear_lifted`.
-@generated function _product_over_split(op::BilinearProduct, ls, r)
-    return _split_expr(ls, :ls, l -> :(_bilinear_lifted(op, $l, r)))
+# without gates: every piece of `ls` meets `r` in `_bilinear_lifted`. Inlined on 1.13 only,
+# as `_product_over_sums` (above) explains.
+Base.@constprop :aggressive @generated function _product_over_split(
+        op::BilinearProduct, ls, r)
+    return _product_inlining(_split_expr(ls, :ls, l -> :(_bilinear_lifted(op, $l, r))))
 end
 
 function _split_expr(@nospecialize(T), path, piece)

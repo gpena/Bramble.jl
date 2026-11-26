@@ -160,6 +160,17 @@ workload. `innerₕ`/`normₕ` (`_dot`/`_dot_masked`, `src/utils/linear_algebra.
 the warmed broadcast axpy `vₕ .= a .* uₕ .+ wₕ` into a `VectorElement` thread under this
 policy.
 
+A warm call allocates a fixed number of bytes per call. At four threads
+(Julia 1.13.4, Apple M2), a stencil such as `D₋ₓ!` takes about 1.6 kB, a vector operator
+such as `divₕ!` about 3.2 kB, and `assemble!` of a bilinear form about 8.2 kB. The count
+does not depend on the grid size. It scales with the number of threaded regions: each
+`Threads.@threads` loop creates one `Task` per thread, so the count grows with the thread
+count (about 0.9 kB for a stencil at two threads). A multigrid V-cycle also grows with its
+number of levels. Zero bytes is out of reach under this policy, since a `Task` is a heap
+object. For a threaded policy that allocates nothing, use [`CpuPolyester`](@ref): it
+allocates 0 B on the operations it covers when the storage is a `Vector` or a contiguous
+view of one.
+
 See also: [`CpuSerial`](@ref), [`CpuPolyester`](@ref), [`ExecutionPolicy`](@ref).
 """
 struct CpuThreaded <: CpuPolicy end

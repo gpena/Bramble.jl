@@ -829,8 +829,11 @@ else
         catch e
             e
         end
-        # the compiler's own `GPUCompiler.KernelError` (GPUCompiler is no test dependency)
-        @test nameof(typeof(err)) === :KernelError
+        # Upstream's own error, whichever stack: `GPUCompiler.KernelError` (Metal 1.10,
+        # GPUCompiler is no test dependency) or Metal's `ArgumentError` naming the CPU array
+        # (Metal 1.12, raised while converting the launch arguments).
+        @test nameof(typeof(err)) in (:KernelError, :ArgumentError)
+        err isa ArgumentError && @test occursin("cannot use a CPU array", err.msg)
         @test !occursin("could not compile the supplied function", sprint(showerror, err))
     end
 end
