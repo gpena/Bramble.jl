@@ -1,6 +1,6 @@
 name: Julia DEV
 
-# On-demand run of the `unit` test group against the Julia 1.14 nightly, for finding out
+# On-demand run of the `unit` test group against Julia 1.14, for finding out
 # what the coming release does to Bramble. Nothing triggers it but `workflow_dispatch`, and nothing depends on
 # it: it is not a gate and not part of the release procedure.
 #
@@ -32,8 +32,8 @@ jobs:
 
       - uses: julia-actions/setup-julia@v3
         with:
-          # `1.14-nightly` is the development build of the 1.14 line, rebuilt daily.
-          version: "1.14-nightly"
+          # `1.14` is the 1.14 release channel (a beta until 1.14.0 is out).
+          version: "1.14"
 
       # Each prerelease is a new build, and a compiled cache from another build is invalid anyway.
       - uses: julia-actions/cache@v3
