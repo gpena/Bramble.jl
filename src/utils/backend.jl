@@ -555,42 +555,28 @@ the stated contract for the types that do.
 """
 supports_undef_construction(::Type{<:AbstractArray}) = true
 
-@noinline function _throw_vector_error(VT, n, undef_form::Bool)
-    tried = undef_form ? "$VT(undef, n)" : "$VT(n)"
-    other = undef_form ? "supports_undef_construction($VT) = false" :
-            "supports_undef_construction($VT) = true"
+@noinline function _throw_sized_error(AT, dims, undef_form::Bool)
+    kind = length(dims) == 1 ? "vector" : "matrix"
+    size = length(dims) == 1 ? "$(dims[1])" : "$(dims)"
+    args = join(("n", "m")[1:length(dims)], ", ")
+    tried = undef_form ? "$AT(undef, $args)" : "$AT($args)"
+    other = undef_form ? "supports_undef_construction($AT) = false" :
+            "supports_undef_construction($AT) = true"
     error(
-        "Cannot create vector of type $VT with size $n: $tried is not defined. Define it, or, if this type constructs the other way, declare Bramble.$other.",
+        "Cannot create $kind of type $AT with size $size: $tried is not defined. Define it, or, if this type constructs the other way, declare Bramble.$other.",
     )
 end
 
-@noinline function _throw_matrix_error(MT, n, m, undef_form::Bool)
-    tried = undef_form ? "$MT(undef, n, m)" : "$MT(n, m)"
-    other = undef_form ? "supports_undef_construction($MT) = false" :
-            "supports_undef_construction($MT) = true"
-    error(
-        "Cannot create matrix of type $MT with size ($n, $m): $tried is not defined. Define it, or, if this type constructs the other way, declare Bramble.$other.",
-    )
-end
-
-# The one place either constructor is chosen. `hasmethod` catches a type that declares the
-# trait it does not honour, which is the only failure left once the choice itself is static.
-@inline function _undef_or_sized(::Type{AT}, n::Integer, thrower) where {AT}
+# The one place either constructor is chosen, for a vector (`dims` of length 1) or a matrix
+# (length 2). `hasmethod` catches a type that declares the trait it does not honour, which
+# is the only failure left once the choice itself is static.
+@inline function _undef_or_sized(::Type{AT}, dims::Vararg{Integer, N}) where {AT, N}
     if supports_undef_construction(AT)
-        hasmethod(AT, Tuple{UndefInitializer, Int}) || thrower(AT, n, true)
-        return AT(undef, n)
+        hasmethod(AT, Tuple{UndefInitializer, Vararg{Int, N}}) || _throw_sized_error(AT, dims, true)
+        return AT(undef, dims...)
     end
-    hasmethod(AT, Tuple{Int}) || thrower(AT, n, false)
-    return AT(n)
-end
-
-@inline function _undef_or_sized(::Type{AT}, n::Integer, m::Integer, thrower) where {AT}
-    if supports_undef_construction(AT)
-        hasmethod(AT, Tuple{UndefInitializer, Int, Int}) || thrower(AT, n, m, true)
-        return AT(undef, n, m)
-    end
-    hasmethod(AT, Tuple{Int, Int}) || thrower(AT, n, m, false)
-    return AT(n, m)
+    hasmethod(AT, Tuple{Vararg{Int, N}}) || _throw_sized_error(AT, dims, false)
+    return AT(dims...)
 end
 
 """
@@ -609,7 +595,7 @@ the type alone.
 - `ErrorException`: If `VT` does not define the constructor its trait declares.
 """
 function vector(::Backend{VT, MT, EP}, n::Integer) where {VT, MT, EP}
-    return _undef_or_sized(VT, n, _throw_vector_error)
+    return _undef_or_sized(VT, n)
 end
 
 # Specialized zero-overhead method for standard Vector{T}
@@ -635,7 +621,7 @@ the type alone.
 - `ErrorException`: If `MT` does not define the constructor its trait declares.
 """
 function matrix(::Backend{VT, MT, EP}, n::Integer, m::Integer) where {VT, MT, EP}
-    return _undef_or_sized(MT, n, m, _throw_matrix_error)
+    return _undef_or_sized(MT, n, m)
 end
 
 # Specialized zero-overhead methods for `Matrix{T}` and sparse matrix types. Other
@@ -657,8 +643,7 @@ Construct an ``n \\times n`` identity matrix matching the matrix type configured
 @inline _backend_eye(::Type{<:SparseMatrixCSC{T, Ti}}, n::Integer) where {T, Ti} = SparseMatrixCSC{T, Ti}(I, n, n)
 @inline _backend_eye(::Type{<:Matrix{T}}, n::Integer) where {T} = Matrix{T}(I, n, n)
 function _backend_eye(::Type{MT}, n::Integer) where {T, MT <: AbstractMatrix{T}}
-    A = _undef_or_sized(MT, n, n, _throw_matrix_error)
-    fill!(A, zero(T))
+    A = _backend_zeros(MT, n)
     for i in 1:n
         A[i, i] = one(T)
     end
@@ -673,7 +658,7 @@ Construct an ``n \\times n`` zero matrix matching the matrix type configured in 
 @inline backend_zeros(backend::Backend, n::Integer) = _backend_zeros(matrix_type(backend), n)
 @inline _backend_zeros(::Type{<:SparseMatrixCSC{T, Ti}}, n::Integer) where {T, Ti} = spzeros(T, Ti, n, n)
 function _backend_zeros(::Type{MT}, n::Integer) where {T, MT <: AbstractMatrix{T}}
-    return fill!(_undef_or_sized(MT, n, n, _throw_matrix_error), zero(T))
+    return fill!(_undef_or_sized(MT, n, n), zero(T))
 end
 
 """
@@ -682,7 +667,6 @@ end
 
 Return the coordinate and scalar element type of vector type `VT` configured in `backend`.
 """
-@inline Base.eltype(backend::Backend{VT, MT, EP}) where {VT, MT, EP} = eltype(typeof(backend))
 @inline Base.eltype(::Type{<:Backend{VT, MT, EP}}) where {VT, MT, EP} = eltype(VT)
 
 function Base.show(io::IO, be::Backend{VT, MT, EP}) where {VT, MT, EP}
