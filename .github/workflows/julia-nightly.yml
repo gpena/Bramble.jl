@@ -34,6 +34,8 @@ jobs:
         with:
           # `1.14` is the 1.14 release channel (a beta until 1.14.0 is out).
           version: "1.14"
+          # 1.14 has only prereleases so far; without this setup-julia finds no match.
+          include-all-prereleases: true
 
       # Each prerelease is a new build, and a compiled cache from another build is invalid anyway.
       - uses: julia-actions/cache@v3
