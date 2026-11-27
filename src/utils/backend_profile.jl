@@ -12,9 +12,9 @@
 #     rows compare (`Float32` for all of them once the Metal row is present).
 #   - `_profile_time(policy, T, n)`: seconds for the best of three sweeps over `n` points
 #     of a vector of `T`, after one warm run. The host method serves every `CpuPolicy`; a
-#     device extension adds a method for its own policy type that allocates the device
-#     vector, runs the sweep through `_sweep_for!` and synchronises before reading the
-#     clock.
+#     device extension adds a method for its own policy type that calls `_profile_sweeps`
+#     with its vector type and its synchronise function, which it runs before each clock
+#     read.
 #   - `_profile_label(policy)`: the row label, e.g. `"Parallel()"`.
 #   - `_profile_spelling(policy)`: the expression to type to get that policy.
 #   - `_profile_available(policy)`: whether `_profile_candidates` lists the policy. `false`
@@ -62,14 +62,27 @@ Device extensions add a method for their own policy type; see the note at the to
 `src/utils/backend_profile.jl`.
 """
 function _profile_time(policy::CpuPolicy, ::Type{T}, n::Integer) where {T <: AbstractFloat}
-    v = Vector{T}(undef, n)
+    return _profile_sweeps(policy, Vector{T}, T, n, _profile_nosync)
+end
+
+# The timing loop every `_profile_time` method shares. `V` builds the vector the sweep fills
+# and `sync` runs after each sweep, before the clock is read: a host sweep is done on return
+# (`_profile_nosync`), a device launch only enqueues. The warm run is synchronised too.
+_profile_nosync() = nothing
+
+function _profile_sweeps(
+        policy::ExecutionPolicy, ::Type{V}, ::Type{T}, n::Integer, sync::F
+) where {T <: AbstractFloat, V <: AbstractVector{T}, F}
+    v = V(undef, n)
     k = _ProfileKernel(T(1), T(0.5))
     idxs = 1:n
     _sweep_for!(policy, v, idxs, k)
+    sync()
     best = typemax(UInt64)
     for _ in 1:3
         t0 = time_ns()
         _sweep_for!(policy, v, idxs, k)
+        sync()
         best = min(best, time_ns() - t0)
     end
     return Float64(best) * 1.0e-9

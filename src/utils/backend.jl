@@ -47,10 +47,9 @@ not been taught otherwise about as host memory. Any array type subtyping
 `GPUArraysCore.AbstractGPUArray` answers `DeviceLocality()` generically, so a
 GPU package extension need not add its own method for that to hold -- Metal's
 `MtlVector`/`MtlMatrix` already subtype it, and any future CUDA/ROCm/oneAPI array type gets
-the right answer the same way, for free. `BrambleMetalExt` keeps its own
-`MtlVector`/`MtlMatrix`/sparse-matrix methods regardless: Julia dispatches to the more
-specific method, and those predate this generic one -- the same idiom as [`ka_device`](@ref):
-a method a package extension supplies for its own type, picked up automatically once loaded.
+the right answer the same way, for free. `BrambleMetalExt` adds methods only for its sparse
+matrix types, which are not `AbstractGPUArray` -- the same idiom as [`ka_device`](@ref): a
+method a package extension supplies for its own type, picked up automatically once loaded.
 
 For an [`ExecutionPolicy`](@ref), `locality` answers what the policy claims. A
 [`CpuPolicy`](@ref) claims [`HostLocality`](@ref) and a [`GpuPolicy`](@ref) claims
@@ -82,9 +81,8 @@ function locality end
 # `AbstractGPUArray` is the abstract supertype every GPU array type subtypes -- Metal.jl's
 # `MtlArray` among them -- so this one generic method answers `DeviceLocality()` for any
 # device array type without that backend's extension needing to redeclare it. Kept more
-# specific than the `AbstractArray` fallback above but strictly less specific than
-# `BrambleMetalExt`'s own `MtlVector`/`MtlMatrix`/sparse-matrix methods, which Julia still
-# dispatches to and which this change does not touch.
+# specific than the `AbstractArray` fallback above. `BrambleMetalExt` adds `locality`
+# methods only for the sparse types that are not `AbstractGPUArray`.
 
 @inline locality(::Type{<:GPUArraysCore.AbstractGPUArray}) = DeviceLocality()
 
@@ -776,8 +774,8 @@ function metal_sparse_csc(A)
     )
 end
 
-# Test/mock hook: when set to a Bool, overrides _gpu_functional for testing device failure
-# without method overwriting (which emits compiler warnings).
+# Test/mock hook: when set to a Bool, `gpu_backend` uses it in place of `_gpu_functional`,
+# for testing device failure without method overwriting (which emits compiler warnings).
 const _gpu_functional_override = Ref{Union{Nothing, Bool}}(nothing)
 
 """
@@ -789,21 +787,18 @@ device, not merely that the corresponding package loaded.
 Defaults to `false` for every name: loading a GPU package extension (`using Metal`, and
 in future `using CUDA`/`using AMDGPU`) succeeds on any platform, whether or not that
 host actually has the accelerator's hardware and drivers -- it degrades gracefully
-rather than erroring. `ext/BrambleMetalExt.jl` overrides this for `Val(:metal)` with
-`Metal.functional()`, the one call that actually probes the device.
-[`gpu_backend`](@ref) requires both this and the extension being
-loaded.
+rather than erroring. `ext/BrambleMetalExt.jl` adds a method for `Val(:metal)` that answers
+`Metal.functional()`, the one call that actually probes the device. A method returns only
+its backend's own answer: [`gpu_backend`](@ref) reads the test hook
+`_gpu_functional_override` before it calls this. It requires both this and the extension
+being loaded.
 
 It is declared with the generic `::Val` signature (rather than `::Val{:metal}` itself) so that
 `BrambleMetalExt`'s own `Val(:metal)` method is strictly more specific than this stub --
 otherwise the extension's method would silently overwrite this one instead of adding to
 it, which precompilation reports as method overwriting.
 """
-function _gpu_functional(::Val)
-    override = _gpu_functional_override[]
-    override !== nothing && return override
-    return false
-end
+_gpu_functional(::Val) = false
 
 """
     gpu_backend(::Type{T} = Float32; policy::ExecutionPolicy = GpuKernel()) -> Backend
@@ -835,7 +830,9 @@ See also: [`metal_backend`](@ref), [`backend`](@ref).
 """
 function gpu_backend(T::Type = Float32; policy::ExecutionPolicy = GpuKernel())
     if Base.get_extension(Bramble, :BrambleMetalExt) !== nothing
-        _gpu_functional(Val(:metal)) || return _throw_metal_not_functional()
+        override = _gpu_functional_override[]
+        functional = override === nothing ? _gpu_functional(Val(:metal)) : override
+        functional || return _throw_metal_not_functional()
         return metal_backend(T; policy)
     end
     return _throw_no_gpu_backend()

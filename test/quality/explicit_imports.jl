@@ -658,10 +658,12 @@ using SparseMatricesCSR: SparseMatricesCSR
                 # BrambleMetalExt reaching into Bramble's own internals:
                 # `_gpu_functional` is the loaded-and-functional predicate `gpu_backend`
                 # dispatches on by `Val`, more specific than the stub in `src/utils/backend.jl`
-                # and not itself public. `_gpu_functional_override` is the
-                # `Ref` test hook `_gpu_functional` reads to fake device (un)availability
-                # without redefining the method; the extension reads the same `Ref` so a test
-                # can force GPU-unavailable behaviour through it too. Neither is public.
+                # and not itself public. The `_profile_*` names are the `profile_backends`
+                # extension point (`src/utils/backend_profile.jl`) the `GpuKernel` row
+                # fills in: `_profile_available`, `_profile_eltype`, `_profile_label`,
+                # `_profile_spelling`, `_profile_time`, and `_profile_sweeps`, the timing
+                # loop its `_profile_time` hands the device vector type and `synchronize`
+                # to. None is public.
                 # `metal_sparse_csr`/`metal_sparse_csc` carry docstrings
                 # on their `src/utils/backend.jl` stubs, but neither is exported nor declared
                 # `public` in `src/Bramble.jl`, nor documented in `docs/src/api/` -- so today
@@ -671,7 +673,12 @@ using SparseMatricesCSR: SparseMatricesCSR
                 # builds the host-side CSR arrays it hands to `metal_sparse_csr` -- the same
                 # combiner `SparseMatrixCSC`'s own method already reaches for by the same name.
                 :_gpu_functional,
-                :_gpu_functional_override,
+                :_profile_available,
+                :_profile_eltype,
+                :_profile_label,
+                :_profile_spelling,
+                :_profile_time,
+                :_profile_sweeps,
                 :metal_sparse_csr,
                 :metal_sparse_csc,
                 Symbol("sparse!"),

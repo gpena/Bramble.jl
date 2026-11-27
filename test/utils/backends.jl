@@ -712,15 +712,16 @@ end
 @testset "GPU extension stubs" begin
     # Invariants tested:
     # 1. `_gpu_functional`'s generic method, which every device name without an extension
-    #    method of its own reaches, answers `false`, or the override hook's value while it is
-    #    set, and `false` again once it is cleared. The docstring is attached to it.
+    #    method of its own reaches, answers `false` and ignores the override hook: the hook
+    #    is read by `gpu_backend` (see "refuses a non-functional extension" above), not by
+    #    the methods. The docstring is attached to it.
     @testset "_gpu_functional fallback" begin
         @test Base.Docs.hasdoc(Bramble, :_gpu_functional)
         dev = Val(:no_such_device)
         @test Bramble._gpu_functional(dev) === false
         try
             Bramble._gpu_functional_override[] = true
-            @test Bramble._gpu_functional(dev) === true
+            @test Bramble._gpu_functional(dev) === false
             Bramble._gpu_functional_override[] = false
             @test Bramble._gpu_functional(dev) === false
         finally
