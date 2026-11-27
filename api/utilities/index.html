@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Utilities — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=9d1a9ff5">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=b8065e38">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Utilities — Bramble.jl">
   <meta property="og:title" content="Utilities — Bramble.jl">
@@ -123,7 +123,7 @@
 <div class="md-docstring" id="Bramble.Backend">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Backend</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L322-L347" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L333-L358" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -272,7 +272,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.CpuThreaded">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.CpuThreaded</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L134-L164" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L134-L175" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -285,13 +285,14 @@ true</code></pre>
 <p>A call made from inside another threaded region, such as the body of a user&#39;s own <code class="md-code-inline">Threads.@threads</code> loop, or from a spawned task while another task&#39;s threaded region runs, executes serially on the calling task instead of throwing, and returns exactly what the same call returns at top level.</p>
 <p><code class="md-code-inline">Base.Threads.@threads</code> is the primitive, and naming it that way leaves room for the others that are not this one – Polyester&#39;s <code class="md-code-inline">@batch</code> and MPI. <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a> is that Polyester-backed sibling: the policy type ships here, but the sweeps it selects live in the <code class="md-code-inline">BramblePolyesterExt</code> package extension, and requesting one without <code class="md-code-inline">using Polyester</code> errors the way <a href="../../api/utilities/#Bramble.metal_backend"><code class="md-code-inline">metal_backend</code></a> does without <code class="md-code-inline">using Metal</code>.</p>
 <p>Where &quot;small&quot; ends differs widely between workloads (restriction, cell averaging, the <code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">normₕ</code> reductions, <code class="md-code-inline">D₋ₓ!</code>, broadcasts), so a size from one does not transfer to another, and it depends on the machine. <code class="md-code-inline">benchmark/policy_crossover.jl</code> measures it per workload. <code class="md-code-inline">innerₕ</code>/<code class="md-code-inline">normₕ</code> (<code class="md-code-inline">_dot</code>/<code class="md-code-inline">_dot_masked</code>, <code class="md-code-inline">src/utils/linear_algebra.jl</code>), <code class="md-code-inline">D₋ₓ!</code> and the warmed broadcast axpy <code class="md-code-inline">vₕ .= a .* uₕ .+ wₕ</code> into a <code class="md-code-inline">VectorElement</code> thread under this policy.</p>
+<p>A warm call allocates a fixed number of bytes per call. At four threads (Julia 1.13.4, Apple M2), a stencil such as <code class="md-code-inline">D₋ₓ!</code> takes about 1.6 kB, a vector operator such as <code class="md-code-inline">divₕ!</code> about 3.2 kB, and <code class="md-code-inline">assemble!</code> of a bilinear form about 8.2 kB. The count does not depend on the grid size. It scales with the number of threaded regions: each <code class="md-code-inline">Threads.@threads</code> loop creates one <code class="md-code-inline">Task</code> per thread, so the count grows with the thread count (about 0.9 kB for a stencil at two threads). A multigrid V-cycle also grows with its number of levels. Zero bytes is out of reach under this policy, since a <code class="md-code-inline">Task</code> is a heap object. For a threaded policy that allocates nothing, use <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a>: it allocates 0 B on the operations it covers when the storage is a <code class="md-code-inline">Vector</code> or a contiguous view of one.</p>
 <p>See also: <a href="../../api/utilities/#Bramble.CpuSerial"><code class="md-code-inline">CpuSerial</code></a>, <a href="../../api/utilities/#Bramble.CpuPolyester"><code class="md-code-inline">CpuPolyester</code></a>, <a href="../../api/utilities/#Bramble.ExecutionPolicy"><code class="md-code-inline">ExecutionPolicy</code></a>.</p>
 </div>
 </div>
 <div class="md-docstring" id="Bramble.CpuPolyester">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.CpuPolyester</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L167-L218" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L178-L229" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -311,7 +312,7 @@ true</code></pre>
 <div class="md-docstring" id="Bramble.GpuOffload">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GpuOffload</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L454-L481" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L465-L492" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -334,7 +335,7 @@ GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) -&gt; GpuOff
 <div class="md-docstring" id="Bramble.GpuPolicy">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GpuPolicy</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L221-L227" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L232-L238" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -348,7 +349,7 @@ GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) -&gt; GpuOff
 <div class="md-docstring" id="Bramble.GpuKernel">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.GpuKernel</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L234-L251" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L245-L262" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -364,7 +365,7 @@ GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) -&gt; GpuOff
 <div class="md-docstring" id="Bramble.Serial">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Serial</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L254-L259" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L265-L270" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -377,7 +378,7 @@ GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) -&gt; GpuOff
 <div class="md-docstring" id="Bramble.Parallel">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.Parallel</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L262-L266" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L273-L277" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -390,7 +391,7 @@ GpuOffload(device_backend::Backend, inner::CpuPolicy = CpuSerial()) -&gt; GpuOff
 <div class="md-docstring" id="Bramble.execution_policy">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.execution_policy</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L382-L390" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L393-L401" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -412,7 +413,7 @@ execution_policy(::Type{&lt;:Backend{&lt;:Any, &lt;:Any, EP}}) -&gt; EP</code></
 <div class="md-docstring" id="Bramble.vector">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.vector</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L587-L601" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L598-L612" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -438,7 +439,7 @@ execution_policy(::Type{&lt;:Backend{&lt;:Any, &lt;:Any, EP}}) -&gt; EP</code></
 <div class="md-docstring" id="Bramble.matrix">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.matrix</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L609-L627" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L620-L638" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -467,7 +468,7 @@ execution_policy(::Type{&lt;:Backend{&lt;:Any, &lt;:Any, EP}}) -&gt; EP</code></
 <div class="md-docstring" id="Bramble.vector_type">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.vector_type</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L358-L363" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L369-L374" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -481,7 +482,7 @@ vector_type(::Type{&lt;:Backend{VT}}) -&gt; Type{VT}</code></pre>
 <div class="md-docstring" id="Bramble.matrix_type">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.matrix_type</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L373-L378" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L384-L389" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -495,7 +496,7 @@ matrix_type(::Type{&lt;:Backend{&lt;:Any, MT}}) -&gt; Type{MT}</code></pre>
 <div class="md-docstring" id="Bramble.backend_types">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backend_types</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L518-L523" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L529-L534" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -509,7 +510,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.supports_undef_construction">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.supports_undef_construction</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L527-L546" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L538-L557" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -528,7 +529,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.backend_eye">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backend_eye</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L642-L646" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L653-L657" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -541,7 +542,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.backend_zeros">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.backend_zeros</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L659-L663" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L670-L674" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -601,7 +602,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.metal_sparse_csr">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.metal_sparse_csr</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L726-L740" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L737-L751" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -625,7 +626,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.metal_sparse_csc">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.metal_sparse_csc</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L747-L761" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L758-L772" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -649,7 +650,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.gpu_backend">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.gpu_backend</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L797-L824" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L808-L835" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -679,7 +680,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.metal_backend">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.metal_backend</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L687-L716" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L698-L727" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -711,7 +712,7 @@ backend_types(::Type{&lt;:Backend{VT, MT, EP}}) -&gt; Tuple{Type, Type{VT}, Type
 <div class="md-docstring" id="Bramble.csr_backend">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.csr_backend</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L869-L886" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/utils/backend.jl#L880-L897" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -851,6 +852,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=9d1a9ff5"></script>
+  <script src="../../assets/materialdocs.js?v=b8065e38"></script>
 </body>
 </html>

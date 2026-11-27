@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Linear and bilinear forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=619b9e76">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=568e910c">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Linear and bilinear forms — Bramble.jl">
   <meta property="og:title" content="Linear and bilinear forms — Bramble.jl">
@@ -147,7 +147,7 @@ l = form(Wₕ, v -&gt; innerₕ(fₕ, v))</code></pre>
 @assert abs(sum(b) - 2 / π) &lt; 1e-3
 length(b), sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 0.6361083632808495)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(33, 0.6361083632808496)</code></pre>
 </div>
 <p>The sum is the trapezoid rule for <span class="md-math md-math-inline">\(\int_0^1 \sin(\pi x)\,dx = 2/\pi\)</span>, within 1e-3 on 33 points.</p>
 <p>In a time loop, <code class="md-code-inline">assemble!</code> refills an existing vector with zero allocations:</p>
@@ -158,7 +158,7 @@ length(b), sum(b)</code></pre>
 @assert abs(sum(b) - 2 / π) &lt; 1e-3  # refilled, not added to the old values
 sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.6361083632808495</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.6361083632808496</code></pre>
 </div>
 <h3 id="Live-grid-coefficients-and-dynamic-scalars" class="md-heading">Live grid coefficients and dynamic scalars<a href="#Live-grid-coefficients-and-dynamic-scalars" class="md-heading-anchor" aria-label="Link to this section">#</a></h3>
 <p>A form keeps direct references to its coefficient arrays. Overwrite a grid function in place with <code class="md-code-inline">Rₕ!(fₕ, ...)</code> or <code class="md-code-inline">parent(fₕ) .= ...</code> between steps, and the next <code class="md-code-inline">assemble!(b, l)</code> reads the new values with no allocation and no rebuilt form.</p>
@@ -174,7 +174,7 @@ assemble!(b_dyn, l_dyn)
 @assert abs(sum(b_dyn) - 4 / π) &lt; 2e-3
 sum(b_dyn)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">1.272216726561699</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">1.2722167265616993</code></pre>
 </div>
 <h2 id="Contracting-without-a-vector" class="md-heading">Contracting without a vector<a href="#Contracting-without-a-vector" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>To get only the number <span class="md-math md-math-inline">\(\ell(v_h)\)</span>, call the form:</p>
@@ -186,7 +186,7 @@ sum(b_dyn)</code></pre>
 @assert l(oneₕ) ≈ sum(b)
 l(oneₕ), sum(b)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6361083632808495, 0.6361083632808495)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.6361083632808495, 0.6361083632808496)</code></pre>
 </div>
 <p>Against the all-ones grid function a linear form is the sum of its assembled vector. <code class="md-code-inline">l(oneₕ)</code> builds no vector and allocates nothing; prefer it when the result is a scalar.</p>
 <p><code class="md-code-inline">evaluate!</code> is the middle case. It takes a scratch vector, fills it with the assembled vector and returns the contraction:</p>
@@ -352,7 +352,7 @@ net_source = sum(assemble(ld))
 @assert abs(r_left - π) &lt; 5e-3 &amp;&amp; abs(r_right - π) &lt; 5e-3
 r_left, r_right, net_source</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(3.139068950903201, 3.139068950903206, 6.278137901806422)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(3.139068950903201, 3.139068950903206, 6.2781379018064225)</code></pre>
 </div>
 <p>Both come out near <span class="md-math md-math-inline">\(\pi\)</span>. For <span class="md-math md-math-inline">\(u = \sin(\pi x)\)</span> the flux <span class="md-math md-math-inline">\(-u&#39;\)</span> leaving the domain is <span class="md-math md-math-inline">\(\pi\)</span> at each end, and the two together recover the discrete net source <span class="md-math md-math-inline">\((f_h, 1)_h\)</span> to round-off at any resolution, which approaches <span class="md-math md-math-inline">\(2\pi\)</span> at second order (<span class="md-math md-math-inline">\(6.2781\)</span> here). The sign convention is in the docstring of <a href="../../api/forms/#Bramble.reaction"><code class="md-code-inline">reaction</code></a>; <a href="../../api/forms/#Bramble.reaction_density"><code class="md-code-inline">reaction_density</code></a> gives the pointwise quantity, suitable for <a href="../../api/exporters/#Bramble.export_vtk"><code class="md-code-inline">export_vtk</code></a>.</p>
 <h2 id="Restricting-a-term-to-part-of-the-mesh" class="md-heading">Restricting a term to part of the mesh<a href="#Restricting-a-term-to-part-of-the-mesh" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -570,6 +570,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=619b9e76"></script>
+  <script src="../../assets/materialdocs.js?v=568e910c"></script>
 </body>
 </html>

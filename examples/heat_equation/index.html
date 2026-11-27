@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Heat equation — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=87219f0b">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=1f17ccf6">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Heat equation — Bramble.jl">
   <meta property="og:title" content="Heat equation — Bramble.jl">
@@ -428,7 +428,7 @@ uₕ = element(Wₕ)
 parent(uₕ) .= sol.u[end]
 normₕ(Rₕ(Wₕ, x -&gt; uexact(x, 1.0)) - uₕ)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">2.3805047580463986e-5</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2.380504758046399e-5</code></pre>
 </div>
 <p>The initial condition is copied, never mutated, and the copy is made consistent with the algebraic rows at <span class="md-math md-math-inline">\(t_0\)</span> before stepping.</p>
 <p><code class="md-code-inline">sol</code> also exports as a ParaView time series; see <a href="../../howto/plotting_export/">Plot or export a grid function</a>.</p>
@@ -477,10 +477,10 @@ hs, errs = heat_series(5)   # 11 up to 161 points
 orders = [log(errs[i] / errs[i + 1]) / log(hs[i] / hs[i + 1]) for i in 1:(length(errs) - 1)]</code></pre>
 </div>
 <pre class="md-output md-output-text"><code class="nohighlight ansi">4-element Vector{Float64}:
- 2.0626743207874627
- 2.0157613948123534
+ 2.062674321025039
+ 2.0157613945747768
  2.003946603482324
- 2.000987054557495</code></pre>
+ 2.000987054632041</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -517,8 +517,8 @@ orders_r = [log(errs_r[i] / errs_r[i + 1]) / log(hs_r[i] / hs_r[i + 1])
 <pre class="md-output md-output-text"><code class="nohighlight ansi">4-element Vector{Float64}:
  2.112192085362945
  2.0294538054675026
- 2.0074611774467157
- 2.001871580171878</code></pre>
+ 2.0074611514206295
+ 2.0018716061979642</code></pre>
 </div>
 <div class="md-multi-output">
 <div class="md-code-block">
@@ -595,7 +595,7 @@ orders_r = [log(errs_r[i] / errs_r[i + 1]) / log(hs_r[i] / hs_r[i + 1])
   const data = [{
   name: "Dirichlet",
   x: [0.22578350716539197,0.11289175358269599,0.05644587679134799,0.028222938395674024,0.014111469197837012],
-  y: [0.010055484076517277,0.0024070002798464653,0.0005952117511686535,0.00014839643215387038,3.7073734471181854e-5],
+  y: [0.010055484076517277,0.002407000279450092,0.0005952117511686535,0.00014839643215387038,3.707373446926619e-5],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#5B5FC7", size: 8 },
@@ -603,7 +603,7 @@ orders_r = [log(errs_r[i] / errs_r[i + 1]) / log(hs_r[i] / hs_r[i + 1])
 {
   name: "Dirichlet and Robin",
   x: [0.22578350716539197,0.11289175358269599,0.05644587679134799,0.028222938395674024,0.014111469197837012],
-  y: [0.007246373441707431,0.0016760521880170483,0.00041054528342382115,0.00010210688741377005,2.5493628005103322e-5],
+  y: [0.007246373441707431,0.0016760521880170483,0.0004105452834238212,0.00010210688925576894,2.5493628005103322e-5],
   mode: 'markers',
   type: 'scatter',
   marker: { color: "#D1495B", size: 8 },
@@ -611,7 +611,7 @@ orders_r = [log(errs_r[i] / errs_r[i + 1]) / log(hs_r[i] / hs_r[i + 1])
 {
   name: "slope 2",
   x: [0.014111469197837012, 0.22578350716539197],
-  y: [3.7073734471181854e-5, 0.009490876024622535],
+  y: [3.707373446926619e-5, 0.009490876024132126],
   mode: 'lines',
   type: 'scatter',
   line: { dash: 'dash', width: 1.5, color: 'rgba(128,128,128,0.7)' },
@@ -895,6 +895,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=87219f0b"></script>
+  <script src="../../assets/materialdocs.js?v=1f17ccf6"></script>
 </body>
 </html>

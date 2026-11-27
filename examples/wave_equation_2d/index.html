@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Acoustic wave equation in two dimensions — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=bc454cf6">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=a0118113">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Acoustic wave equation in two dimensions — Bramble.jl">
   <meta property="og:title" content="Acoustic wave equation in two dimensions — Bramble.jl">
@@ -401,7 +401,7 @@ err = normₕ(uT - Rₕ(Wₕ, x -&gt; uexact(x, 1.0)))
 
 err</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0015277419375393933</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0015277419375393936</code></pre>
 </div>
 <h2 id="The-matrices" class="md-heading">The matrices<a href="#The-matrices" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p><a href="../../api_sciml/#Bramble.mass_matrix"><code class="md-code-inline">mass_matrix</code></a> is the stacked <code class="md-code-inline">2n × 2n</code> mass matrix, one diagonal block per leaf, and <a href="../../api_sciml/#Bramble.operator_matrix"><code class="md-code-inline">operator_matrix</code></a> is <span class="md-math md-math-inline">\(A\)</span>, with a constrained row replaced by <code class="md-code-inline">eₖ</code>; its lower left block is <span class="md-math md-math-inline">\(c^2 K\)</span> on the interior rows, which the energy below reuses.</p>
@@ -648,6 +648,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=bc454cf6"></script>
+  <script src="../../assets/materialdocs.js?v=a0118113"></script>
 </body>
 </html>

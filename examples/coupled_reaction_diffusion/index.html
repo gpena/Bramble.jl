@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Coupled nonlinear reaction-diffusion system — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=82adfe29">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=441d1b3e">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Coupled nonlinear reaction-diffusion system — Bramble.jl">
   <meta property="og:title" content="Coupled nonlinear reaction-diffusion system — Bramble.jl">
@@ -533,7 +533,7 @@ sol_ns.retcode, maximum(abs, sol_ns.u .- w_native)</code></pre>
 <pre><code class="language-julia">uexact, vexact = Rₕ(Wₕ, u_ex), Rₕ(Wₕ, v_ex)
 norm₁ₕ(uₕ .- uexact), norm₁ₕ(vₕ .- vexact)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.019779214731516854, 0.10747520241691953)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.01977921473151685, 0.10747520241691953)</code></pre>
 </div>
 <h2 id="Exploring-the-system-interactively" class="md-heading">Exploring the system interactively<a href="#Exploring-the-system-interactively" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
 <p>The panel below poses a different boundary-value problem in the same two unknowns, so that every slider has a visible effect:</p>
@@ -1605,6 +1605,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=82adfe29"></script>
+  <script src="../../assets/materialdocs.js?v=441d1b3e"></script>
 </body>
 </html>

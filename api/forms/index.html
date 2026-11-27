@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Forms — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=534e332a">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=d9c371bf">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Forms — Bramble.jl">
   <meta property="og:title" content="Forms — Bramble.jl">
@@ -345,7 +345,7 @@ assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = n
 <div class="md-docstring" id="Bramble.assemble!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1623-L1656" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1634-L1667" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -417,7 +417,7 @@ assemble!(K::RankOneUpdate, F, a::RankOneForm, l::GhostLinearForm; dirichlet = n
 <div class="md-docstring" id="Bramble.assemble_parallel!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.assemble_parallel!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1825-L1834" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/linear.jl#L1836-L1845" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1063,7 +1063,7 @@ jacobian!(J, jf, u)                    # J = ∂R/∂u at u</code></pre>
 <div class="md-docstring" id="Bramble.dirichlet_bc!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.dirichlet_bc!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L322-L331" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L324-L333" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1135,7 +1135,7 @@ symmetrize!(A, F, Vₕ::CompositeGridSpace, labels::Symbol...; components = noth
 <div class="md-docstring" id="Bramble.symmetrize!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.symmetrize!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L792-L794" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/assembly/dirichlet_constraints.jl#L794-L796" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <p><code class="md-code-inline">symmetrize!(A, F, Wₕ::ScalarGridSpace, labels...; components = nothing)</code>: the same on <code class="md-code-inline">mesh(Wₕ)</code>; <code class="md-code-inline">components</code> may only be <code class="md-code-inline">nothing</code> or <code class="md-code-inline">1</code></p>
@@ -1180,7 +1180,7 @@ symmetrize!(A, F, Vₕ::CompositeGridSpace, labels::Symbol...; components = noth
 <div class="md-docstring" id="Bramble.reaction">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L367-L407" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L396-L436" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1229,7 +1229,7 @@ reaction(a, l, uₕ; marker = :right)   # ≈ π</code></pre>
 <div class="md-docstring" id="Bramble.reaction!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L441-L451" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L469-L479" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1242,7 +1242,7 @@ reaction(a, l, uₕ; marker = :right)   # ≈ π</code></pre>
 <div class="md-docstring" id="Bramble.reaction_density">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction_density</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L508-L526" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L536-L554" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1263,7 +1263,7 @@ reaction(a, l, uₕ; marker = :right)   # ≈ π</code></pre>
 <div class="md-docstring" id="Bramble.reaction_density!">
 <div class="md-docstring-header">
 <h4 class="md-docstring-binding"><code>Bramble.reaction_density!</code></h4>
-<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L561-L571" title="View source">source</a>
+<a class="md-docstring-source" href="https://github.com/gpena/Bramble.jl/blob/main/src/postprocessing/reaction.jl#L588-L598" title="View source">source</a>
 </div>
 <div class="md-docstring-content">
 <div class="md-code-block">
@@ -1311,6 +1311,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=534e332a"></script>
+  <script src="../../assets/materialdocs.js?v=d9c371bf"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>How to solve a pure Neumann problem — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=2ff5ee76">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=f220dc48">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="How to solve a pure Neumann problem — Bramble.jl">
   <meta property="og:title" content="How to solve a pure Neumann problem — Bramble.jl">
@@ -276,7 +276,7 @@ bad = check_compatibility(0.2)
 
 ok.defect, (bad.λ, bad.second_ratio)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(7.309780343599364e-6, (0.2000631200513299, 1.0000182239908741))</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(7.309780343599365e-6, (0.2000631200513299, 1.0000182239908744))</code></pre>
 </div>
 <p>The compatible problem raises no warning and its relative defect is below <span class="md-math md-math-inline">\(10^{-4}\)</span>. The shifted one warns once. Its <span class="md-math md-math-inline">\(\lambda\)</span> is <span class="md-math md-math-inline">\(0.2\)</span>, the shift, on the mesh and on both refinements, so the ratio of the removed loads is <span class="md-math md-math-inline">\(1\)</span> where a quadrature error would give about <span class="md-math md-math-inline">\(4\)</span>. The mesh <code class="md-code-inline">Ωₕ</code> is not modified, and a mesh that carries markers of its own needs the domain&#39;s <code class="md-code-inline">markers(Ω)</code> as a third argument so that the refinement can evaluate them again.</p>
 <p>The check has limits. A relative defect on the refined mesh below <code class="md-code-inline">5e-3</code> is accepted as compatible, so a small incompatibility is not detected. Compatible data with a singular flux at a boundary point, whose quadrature error falls slower than the factor of four, can be reported incompatible. When the defect is above the floor the problem is built on a mesh with 16 times the points of <code class="md-code-inline">Ωₕ</code> in 2D.</p>
@@ -330,7 +330,7 @@ rel_dense = norm(u_pen - u_dense) / norm(u_dense)
 
 rel_mz, rel_dense</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0, 5.648025058533923e-15)</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">(0.0, 5.594892379526002e-15)</code></pre>
 </div>
 <p>The difference from the <code class="md-code-inline">mean_zero</code> solve is about <span class="md-math md-math-inline">\(10^{-15}\)</span> for <span class="md-math md-math-inline">\(\gamma \ge 1\)</span> and grows as <span class="md-math md-math-inline">\(1/\gamma\)</span>: a small <span class="md-math md-math-inline">\(\sigma\)</span> makes <span class="md-math md-math-inline">\(-1/\sigma\)</span> large against the entries of <code class="md-code-inline">A</code> and costs digits, so take <span class="md-math md-math-inline">\(\gamma \ge 10^{-2}\)</span>. A large <span class="md-math md-math-inline">\(\sigma\)</span> costs nothing. The <a href="../../api/solvers/#Bramble.pde_solve"><code class="md-code-inline">pde_solve</code></a> docstring gives the measured figures.</p>
 <p>The <code class="md-code-inline">σ</code> is read when the form is assembled: with a <code class="md-code-inline">Ref</code> factor, call <code class="md-code-inline">assemble!(K_pen, a_pen)</code> after changing it and before the next solve. With <code class="md-code-inline">dirichlet</code>, the Dirichlet rows of <code class="md-code-inline">K_pen</code> are identity rows and the penalty&#39;s row vector is zeroed there. A form takes one rank-one term. Two are refused with an <code class="md-code-inline">ArgumentError</code>, so add the scalars when they share the functionals. On a ghost space the rank-one term is covered by the <a href="../../internals/space/">support table</a>.</p>
@@ -363,6 +363,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=2ff5ee76"></script>
+  <script src="../../assets/materialdocs.js?v=f220dc48"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Heat equation: time stepping details — Bramble.jl</title>
-  <link rel="stylesheet" href="../../assets/materialdocs.css?v=d4961ac5">
+  <link rel="stylesheet" href="../../assets/materialdocs.css?v=6dad99a3">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <meta name="title" content="Heat equation: time stepping details — Bramble.jl">
   <meta property="og:title" content="Heat equation: time stepping details — Bramble.jl">
@@ -164,7 +164,7 @@ uₕ_r = element(Wₕ)
 parent(uₕ_r) .= sol_rosenbrock.u[end]
 normₕ(Rₕ(Wₕ, x -&gt; uexact(x, 1.0)) - uₕ_r)</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">2.3805036993673634e-5</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">2.3805036993673637e-5</code></pre>
 </div>
 <p>No <code class="md-code-inline">AutoFiniteDiff()</code> and no BDF fallback: <code class="md-code-inline">ode_problem</code> already hands the solver the exact Jacobian <span class="md-math md-math-inline">\(-A\)</span>, and <code class="md-code-inline">tgrad</code> supplies the <code class="md-code-inline">t</code>-derivative, so <code class="md-code-inline">Rodas5P</code> differentiates nothing.</p>
 <h2 id="A-time-dependent-operator" class="md-heading">A time-dependent operator<a href="#A-time-dependent-operator" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -190,7 +190,7 @@ sol_t_rosenbrock = solve(prob_t, Rodas5P(); reltol = 1e-11, abstol = 1e-13)
 sol_t_fbdf = solve(prob_t, FBDF(); reltol = 1e-11, abstol = 1e-13)
 maximum(abs.(sol_t_rosenbrock.u[end] .- sol_t_fbdf.u[end]))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">1.852989983675002e-12</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">4.1046610554928975e-12</code></pre>
 </div>
 <p>The same <code class="md-code-inline">ODEProblem</code>, one stepper differentiating through <code class="md-code-inline">t</code> by default and the other needing no <code class="md-code-inline">∂f/∂t</code> at all, land on the same answer. The operator needed neither <code class="md-code-inline">AutoFiniteDiff()</code> nor a hand-written <code class="md-code-inline">tgrad</code>.</p>
 <h2 id="Hand-rolled-backward-Euler" class="md-heading">Hand-rolled backward Euler<a href="#Hand-rolled-backward-Euler" class="md-heading-anchor" aria-label="Link to this section">#</a></h2>
@@ -248,7 +248,7 @@ end
 
 maximum(abs.(u_be .- sol_t_fbdf.u[end]))</code></pre>
 </div>
-<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0005879630938767921</code></pre>
+<pre class="md-output md-output-text"><code class="nohighlight ansi">0.0005879630916251211</code></pre>
 </div>
 <p>Each step zeroes the stored values of <code class="md-code-inline">A_be</code> and keeps its pattern. <code class="md-code-inline">dirichlet_bc!</code> runs after both accumulations and never between them: accumulating a second piece into an already-constrained row would add its contribution on top of the identity <code class="md-code-inline">dirichlet_bc!</code> wrote there.</p>
 <p>Backward Euler at <span class="md-math md-math-inline">\(\Delta t = 1/200\)</span> is first order in time, so it differs from the adaptive <code class="md-code-inline">FBDF</code> solve above by about <span class="md-math md-math-inline">\(6 \times 10^{-4}\)</span>.</p>
@@ -280,6 +280,6 @@ document.querySelectorAll('.md-math').forEach(function (el) {
 });</script>
   <script src="../../siteinfo.js"></script>
   <script src="../../../versions.js"></script>
-  <script src="../../assets/materialdocs.js?v=d4961ac5"></script>
+  <script src="../../assets/materialdocs.js?v=6dad99a3"></script>
 </body>
 </html>
