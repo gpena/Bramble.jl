@@ -27,9 +27,8 @@
 # unsymmetric systems. An explicit `sym` hint is trusted unchecked, and `:unsymmetric` is the
 # one that routes away.
 function _default_wants_accelerate(A, sym)
-    sym === :spd || sym === :definite || sym == 1 ||
-        sym === :symmetric || sym == 2 ||
-        (sym === :auto && issymmetric(A))
+    s = _normalize_sym(sym)
+    return s === :spd || s === :symmetric || (s === :auto && sym !== nothing && issymmetric(A))
 end
 
 # Accelerate factors `Float32`, `Float64` and their complex types only. `:default` sends it
@@ -223,7 +222,7 @@ end
 function _solve_routed(A::SparseMatrixCSC, F::AbstractVector; solver::Symbol, sym, kwargs...)
     if solver === :default
         _reject_unknown_kwargs(:pde_solve, "solver = :default", kwargs, (:kind,))
-        if Sys.isapple() && Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing &&
+        if Sys.isapple() && _ext_loaded(:BrambleAppleAccelerateExt) &&
            _default_accelerate_eltypes(eltype(A), float(promote_type(eltype(A), eltype(F)))) &&
            _default_wants_accelerate(A, sym)
             return accelerate_solve(A, F; sym = sym, kwargs...)
@@ -297,7 +296,7 @@ _check_tag_order(::Type, what::AbstractString = "load") = nothing
 function _primal_factorize(A::SparseMatrixCSC, ::Type{S}, solver::Symbol, sym, kwargs) where {S}
     if solver === :default
         _reject_unknown_kwargs(:pde_solve, "solver = :default", kwargs, (:kind,))
-        if Sys.isapple() && Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing &&
+        if Sys.isapple() && _ext_loaded(:BrambleAppleAccelerateExt) &&
            _default_accelerate_eltypes(eltype(A), float(promote_type(eltype(A), S))) &&
            _default_wants_accelerate(A, sym)
             return accelerate_factorize(A; sym = sym, kwargs...)
@@ -451,7 +450,7 @@ function _bordered_promoted(::Type{S}, ::Type{T}, A, F, r, w, Z, solver, kwargs)
     if solver === :default
         _reject_unknown_kwargs(:pde_solve, "solver = :default", kwargs, (:kind,))
         x = if bsym === :symmetric && Sys.isapple() &&
-               Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing &&
+               _ext_loaded(:BrambleAppleAccelerateExt) &&
                _default_accelerate_eltypes(T, S)
             accelerate_solve(B, b; sym = bsym, kwargs...)
         else
@@ -487,7 +486,7 @@ function _bordered_factorize(B, bsym, ::Type{T}, ::Type{S}, solver::Symbol, kwar
     if solver === :default
         _reject_unknown_kwargs(:pde_solve, "solver = :default", kwargs, (:kind,))
         if bsym === :symmetric && Sys.isapple() &&
-           Base.get_extension(Bramble, :BrambleAppleAccelerateExt) !== nothing &&
+           _ext_loaded(:BrambleAppleAccelerateExt) &&
            _default_accelerate_eltypes(T, S)
             return accelerate_factorize(B; sym = bsym, kwargs...)
         end
@@ -650,7 +649,7 @@ const _WrappedSparse = Union{Adjoint{<:Any, <:SparseMatrixCSC},
 
 _rank_one_sparse(A::SparseMatrixCSC) = A
 _rank_one_sparse(A::_WrappedSparse) = sparse(A)
-_rank_one_sparse(A::AbstractMatrix) = _is_csr(A) ? _csr_to_csc(A) : _throw_rank_one_dense(A)
+_rank_one_sparse(A::AbstractMatrix) = _throw_rank_one_dense(A)
 
 @noinline function _throw_rank_one_dense(@nospecialize(A))
     throw(ArgumentError("pde_solve(K::RankOneUpdate, F) solves through a sparse bordered " *
@@ -685,14 +684,4 @@ _sees_constants(w, tol) = abs(sum(w)) > tol * norm(w, 1)
                         "A + σ wₛ wₜᵀ is singular. Penalise a functional of $f that sees " *
                         "constants, such as σ * innerₕ(1, u) * innerₕ(1, v), or solve " *
                         "pde_solve(K, F; mean_zero = w)."))
-end
-
-# `SparseMatrixCSR` support, via the same CSC-conversion fallback `sparse_factorize` uses
-# (`_is_csr`/`_csr_to_csc`, src/solvers/sparse_solvers.jl -- see that file's comment for why
-# `SparseMatrixCSR` cannot be named as a compile-time type here). A non-CSR, non-CSC
-# `AbstractMatrix` (e.g. a dense `Matrix`) still throws a plain `MethodError`, the same as
-# before this method existed.
-function pde_solve(A::AbstractMatrix, F::AbstractVector; kwargs...)
-    _is_csr(A) && return pde_solve(_csr_to_csc(A), F; kwargs...)
-    throw(MethodError(pde_solve, (A, F)))
 end

@@ -82,8 +82,6 @@ end
 # The largest dense coarsest level `gmg_preconditioner` factorises.
 const _GMG_MAX_COARSE_DOFS = 4096
 
-_gmg_default_smoother(op) = chebyshev_smoother(op)
-
 # Whether every axis of `n` points with more than one coarsens `L` times by 2 and keeps at least
 # three points. `L` is an argument, not captured, so the loop below never boxes it.
 _gmg_coarsens(n, L::Int) = all(k -> k == 1 || (trailing_zeros(k - 1) >= L && (k - 1) >> L >= 2), n)
@@ -101,7 +99,7 @@ function _gmg_default_levels(Ωₕ::AbstractMeshType)
 end
 
 """
-    gmg_preconditioner(build, Ωₕ::AbstractMeshType; levels = nothing, cycle = :V, ν₁ = 2, ν₂ = 2, smoother = op -> chebyshev_smoother(op)) -> GMGPreconditioner
+    gmg_preconditioner(build, Ωₕ::AbstractMeshType; levels = nothing, cycle = :V, ν₁ = 2, ν₂ = 2, smoother = chebyshev_smoother) -> GMGPreconditioner
 
 The geometric multigrid preconditioner of the form `build(gridspace(Ωₕ))`. `ldiv!(y, P, x)`
 runs one cycle for `A y = x` from `y = 0` over the hierarchy
@@ -171,7 +169,7 @@ the grid size.
 - `ν₁`, `ν₂`: The number of [`smooth!`](@ref) calls before and after the coarse
   correction (`2` each by default).
 - `smoother`: A function of a level's [`MatrixFreeOperator`](@ref) returning its
-  [`AbstractSmoother`](@ref) (default: `op -> chebyshev_smoother(op)`, degree 2, which damped
+  [`AbstractSmoother`](@ref) (default: `chebyshev_smoother`, degree 2, which damped
   most per product with `A` in the two-grid measurements of [`chebyshev_smoother`](@ref)). A
   smoother other than the three Bramble provides is post-smoothed with `smooth!` as well,
   so it must be self-adjoint in the `A` inner product for the cycle to be symmetric.
@@ -215,7 +213,7 @@ See also: [`GMGPreconditioner`](@ref), [`gmg_solve`](@ref), [`v_cycle!`](@ref),
 """
 function gmg_preconditioner(
         build, Ωₕ::AbstractMeshType; levels = nothing, cycle::Symbol = :V,
-        ν₁::Integer = 2, ν₂::Integer = 2, smoother = _gmg_default_smoother
+        ν₁::Integer = 2, ν₂::Integer = 2, smoother = chebyshev_smoother
 )
     H, forms = _gmg_level_forms(build, Ωₕ, levels, cycle, ν₁, ν₂)
     return _gmg_preconditioner(H, forms, cycle, ν₁, ν₂, smoother)
@@ -467,7 +465,8 @@ end
 
 function ldiv!(y::AbstractVector, P::GMGPreconditioner, x::AbstractVector)
     n = first(size(P))
-    (length(x) == n && length(y) == n) || _throw_gmg_dimmismatch(:ldiv!, P, y, x)
+    (length(x) == n && length(y) == n) ||
+        _throw_dimmismatch(P, y, x, "got vectors of length", "and", "ldiv!: ")
     _ldiv_by_parts(P, y, x) && return _ldiv_by_parts!(y, P, x)
     yd, xd = _mf_data(y), _mf_data(x)
     Base.require_one_based_indexing(yd, xd)
@@ -489,20 +488,12 @@ ldiv!(P::GMGPreconditioner, x::AbstractVector) = ldiv!(x, P, x)
 # and aliasing are checked.
 @inline function _gmg_cycle_data(fname, P, x, b)
     n = first(size(P))
-    (length(x) == n && length(b) == n) || _throw_gmg_dimmismatch(fname, P, x, b)
+    (length(x) == n && length(b) == n) ||
+        _throw_dimmismatch(P, x, b, "got vectors of length", "and", "$fname: ")
     xd, bd = _mf_data(x), _mf_data(b)
     Base.require_one_based_indexing(xd, bd)
     Base.mightalias(xd, bd) && throw(ArgumentError("$fname: x and b must not alias"))
     return xd, bd
-end
-
-@noinline function _throw_gmg_dimmismatch(fname, P, x, b)
-    throw(
-        DimensionMismatch(
-        "$fname: GMGPreconditioner of size $(size(P)) got vectors of length $(length(x)) " *
-        "and $(length(b))",
-    ),
-    )
 end
 
 # One cycle on level `l` for `A_l x = b` from the iterate `x`, with `γ` coarse cycles per
@@ -570,7 +561,7 @@ end
 # --- Solver ------------------------------------------------------------------------- #
 
 """
-    gmg_solve(build, Ωₕ::AbstractMeshType, b; levels = nothing, cycle = :V, ν₁ = 2, ν₂ = 2, smoother = op -> chebyshev_smoother(op), tol = nothing, maxiters = 100) -> VectorElement
+    gmg_solve(build, Ωₕ::AbstractMeshType, b; levels = nothing, cycle = :V, ν₁ = 2, ν₂ = 2, smoother = chebyshev_smoother, tol = nothing, maxiters = 100) -> VectorElement
 
 The solution of `A u = b` by multigrid iteration, with `A` the matrix of
 `build(gridspace(Ωₕ))`: from `u = 0`, cycles of [`gmg_preconditioner`](@ref)`(build, Ωₕ;
@@ -639,7 +630,7 @@ See also: [`gmg_preconditioner`](@ref), [`v_cycle!`](@ref), [`fmg!`](@ref).
 function gmg_solve(
         build, Ωₕ::AbstractMeshType, b::AbstractVector; levels = nothing,
         cycle::Symbol = :V, ν₁::Integer = 2, ν₂::Integer = 2,
-        smoother = _gmg_default_smoother, tol = nothing, maxiters::Integer = 100
+        smoother = chebyshev_smoother, tol = nothing, maxiters::Integer = 100
 )
     (tol === nothing || (tol isa Real && tol > 0)) ||
         throw(ArgumentError("gmg_solve needs tol > 0, got $tol"))

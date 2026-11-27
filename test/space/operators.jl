@@ -13,9 +13,11 @@ using ..TestUtils: _Const, _x1, _x1_plus_x2, _sin_x1_times_x2, _x1_times_x2
 using Bramble: components, restrict_to
 # Internal: defined and documented, not exported.
 import Bramble: D₊ₓ, D₊ᵧ, D₊₂, D₊, div₊ₕ, curl₊ₕ, forward_star_difference
-# `M₊*` is `public`, not `export`ed (average.jl's own note on why); `kronecker_operator_matrix`
-# is neither, the oracle `stencil_matrix` is checked against.
-import Bramble: M₊ₓ, M₊ᵧ, M₊₂, kronecker_operator_matrix
+# `M₊*` is `public`, not `export`ed (average.jl's own note on why).
+import Bramble: M₊ₓ, M₊ᵧ, M₊₂
+# The oracle `stencil_matrix` is checked against.
+include("kronecker_oracle.jl")
+using .KroneckerOracle: kronecker_operator_matrix
 using Bramble:
                IdentityOperator,
                ZeroOperator,
@@ -221,7 +223,8 @@ end
 
 # `stencil_matrix`: every family's public per-axis alias routes through the single-pass
 # builder in `src/operators/stencil.jl`. The Kronecker products of shift matrices that
-# `kronecker_operator_matrix` builds (`src/operators/shift.jl`) are the oracle. Checked entrywise,
+# `kronecker_operator_matrix` builds (`test/space/kronecker_oracle.jl`) are the oracle.
+# Checked entrywise,
 # `nnz` included, on non-uniform meshes in 1D/2D/3D so a boundary weight that would only
 # coincidentally match on a uniform grid cannot hide a mistake.
 @testset "stencil_matrix vs Kronecker (#185)" begin

@@ -2,7 +2,7 @@ module GeometrySetsTests
 
 using Test
 using Bramble
-using Bramble: CartesianProduct, set, is_collapsed, point_type, center, point, projection,
+using Bramble: CartesianProduct, set, is_collapsed, center, point, projection,
                topo_dim
 using StaticArrays
 using Supposition
@@ -139,7 +139,6 @@ using ..TestUtils: alloc_test, @test_allocs
     # 5. extrema and indexing X(i) return interval tuples; out-of-bounds raises BoundsError.
     # 6. first and last return the lower and upper bounds of 1D intervals.
     # 7. projection extracts individual 1D coordinate intervals as CartesianProduct{1}.
-    # 8. point_type reflects coordinate representation (T for 1D, NTuple{D, T} for D-dimensional).
     @testset "Accessors and geometric properties" begin
         I = interval(0.0, 1.0)
         R2 = interval(0, 1) × interval(2, 3)
@@ -204,14 +203,6 @@ using ..TestUtils: alloc_test, @test_allocs
         @test is_collapsed(R2_c, 2) == true
         @test_throws BoundsError is_collapsed(R2_c, 0)
         @test_throws BoundsError is_collapsed(R2_c, 3)
-
-        # Point representation type
-        @test point_type(I) === Float64
-        @test point_type(typeof(I)) === Float64
-        @test point_type(R2) === NTuple{2, Float64}
-        @test point_type(typeof(R2)) === NTuple{2, Float64}
-        @test point_type(R3) === NTuple{3, Float64}
-        @test point_type(typeof(R3)) === NTuple{3, Float64}
 
         # Indexing syntax X(i)
         @test all(isapprox.(I(1), (0.0, 1.0)))
@@ -476,9 +467,8 @@ using ..TestUtils: alloc_test, @test_allocs
         print_header(pp0, "Header")
         @test occursin("Header", String(take!(io)))
 
-        print_header(pp0, "Title", "Float64")
-        str = String(take!(io))
-        @test occursin("Title", str) && occursin("Float64", str)
+        print_header(pp1, "Title")
+        @test String(take!(io)) == "  Title\n"
 
         print_section_header(pp0, "Section:")
         @test occursin("Section:", String(take!(io)))

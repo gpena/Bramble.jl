@@ -210,7 +210,7 @@ end
 function _lower_sources(op::LinearProduct{D, W}, space) where {D, W}
     left = _lower_sources(op.left_op, space)
     return left === op.left_op ? op :
-           LinearProduct{D, W, typeof(left), typeof(op.right_op)}(op.inner, left, op.right_op)
+           LinearProduct{D, W}(op.inner, left, op.right_op)
 end
 
 function _lower_sources(op::ShiftNode{D, Dim}, space) where {D, Dim}
@@ -218,8 +218,8 @@ function _lower_sources(op::ShiftNode{D, Dim}, space) where {D, Dim}
     return inner === op.inner_op ? op : ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
 end
 
-# Every other one-operand node (differences, averages, jumps) lowers its operand, as
-# `_lower_signs` does: the node reads its operand at the same points either way.
+# Every other one-operand node (scales, differences, averages, jumps) lowers its operand,
+# as `_lower_signs` does: the node reads its operand at the same points either way.
 _lower_sources(op::UnaryWrapper, space) = _rewrap_inner(op, _lower_sources(op.inner_op, space))
 
 # Two exceptions. A restricted source is called only at the points its region reaches, on
@@ -350,7 +350,7 @@ end
 function _typed_restrictions(op::LinearProduct{D, W}, sp, reach) where {D, W}
     left = _typed_restrictions(op.left_op, sp, reach)
     return left === op.left_op ? op :
-           LinearProduct{D, W, typeof(left), typeof(op.right_op)}(op.inner, left, op.right_op)
+           LinearProduct{D, W}(op.inner, left, op.right_op)
 end
 
 function _typed_restrictions(op::RegionRestriction, sp, reach)
@@ -536,14 +536,14 @@ function _split_restricted_products(op::LinearProduct{D, W}, ::Type{E}) where {D
     if length(rs) == 1 || _mixed_scales(r)
         _mixed_scales(r) || (r = _hoisted(r, rs))
         return r === op.right_op ? op :
-               LinearProduct{D, W, typeof(op.left_op), typeof(r)}(op.inner, op.left_op, r)
+               LinearProduct{D, W}(op.inner, op.left_op, r)
     end
     return _linear_product_sum(op, rs)
 end
 
 function _widened_product(op::LinearProduct{D, W}, ::Type{E}) where {D, W, E}
     r = _bits_uniform_scales(op.right_op, E)
-    return LinearProduct{D, W, typeof(op.left_op), typeof(r)}(op.inner, op.left_op, r)
+    return LinearProduct{D, W}(op.inner, op.left_op, r)
 end
 
 # One `LinearProduct` per group, summed left to right; recursive on the tuple's type, so the
@@ -551,8 +551,8 @@ end
 @inline _linear_product_sum(op::LinearProduct, rs::Tuple{Any}) = _linear_piece(op, rs[1])
 @inline _linear_product_sum(op::LinearProduct, rs::Tuple) = OperatorAdd(
     _linear_product_sum(op, Base.front(rs)), _linear_piece(op, rs[end]))
-@inline _linear_piece(op::LinearProduct{D, W}, r) where {D, W} = LinearProduct{
-    D, W, typeof(op.left_op), typeof(r)}(op.inner, op.left_op, r)
+@inline _linear_piece(op::LinearProduct{D, W}, r) where {D, W} = LinearProduct{D, W}(
+    op.inner, op.left_op, r)
 
 # --- A VectorElement source must live on the leaf it is read on --- #
 #
@@ -566,8 +566,10 @@ end
 # components outside the space never reach here, as `_lower_sources_for_space` runs first
 # in `form` and throws for them. The walk reaches what `_host_sources` does. Once, at
 # `form`: points moved later (`change_points!`) are not caught, as in `_same_mesh`.
-_check_source_meshes(ast, Wₕ) = _check_walked_meshes(_check_source_mesh, ast, Wₕ, Wₕ)
+_check_source_meshes(ast, Wₕ) = _check_walked_meshes(
+    Base.Fix1(_each_mesh_node, _check_source_mesh), ast, Wₕ, Wₕ)
 
+# One node's check; `_each_mesh_node` walks the term.
 _check_source_mesh(op, Ωₕ) = nothing
 
 function _check_source_mesh(op::SourceVector{D, <:VectorElement}, Ωₕ) where {D}
@@ -582,18 +584,8 @@ function _check_source_mesh(op::GridFunctionScale{D, <:VectorElement}, Ωₕ) wh
     _check_not_ghost(space(op.grid_function))
     Ωs = mesh(space(op.grid_function))
     _same_mesh(Ωs, Ωₕ) || _throw_source_mesh(Ωs, Ωₕ)
-    return _check_source_mesh(op.inner_op, Ωₕ)
-end
-
-function _check_source_mesh(op::Union{OperatorAdd, LinearProduct, BilinearProduct}, Ωₕ)
-    _check_source_mesh(op.left_op, Ωₕ)
-    _check_source_mesh(op.right_op, Ωₕ)
     return nothing
 end
-
-# The operand of an `InterpolationNode` lives on another mesh, so it is not entered.
-_check_source_mesh(op::InterpolationNode, Ωₕ) = nothing
-_check_source_mesh(op::UnaryWrapper, Ωₕ) = _check_source_mesh(op.inner_op, Ωₕ)
 
 # An element of a `GhostGridSpace` holds one value per degree of freedom (physical nodes,
 # then ghosts by facet), while the walk reads one per padded point, so it reads past its
@@ -656,17 +648,39 @@ end
 # walks, so a composite whose collapsed leaf the term never touches still forms. A
 # component outside the space matches no leaf here and is refused where it was before. The
 # operand of an `InterpolationNode` lives on another mesh, so it is not entered. A linear
-# form walks its test space; `bilinear.jl`'s `form` passes both of its spaces and runs both
-# checks in one walk (`_check_form_meshes`), since no source is lowered between them there.
+# form walks its test space; `bilinear.jl`'s `form` passes both of its spaces and routes
+# each term once for both checks (`_check_form_meshes`), since no source is lowered between
+# them there.
 # The walk is `_check_walked_meshes`, shared with `_check_source_meshes` above.
 _check_centered_meshes(ast, Vₕ) = _check_centered_meshes(ast, Vₕ, Vₕ)
-_check_centered_meshes(ast, Wₕ, Vₕ) = _check_walked_meshes(_check_centered_mesh, ast, Wₕ, Vₕ)
+function _check_centered_meshes(ast, Wₕ, Vₕ)
+    _check_walked_meshes(
+        Base.Fix1(_each_mesh_node, _check_centered_mesh), ast, Wₕ, Vₕ)
+end
 
 _check_form_meshes(ast, Wₕ, Vₕ) = _check_walked_meshes(_check_term_meshes, ast, Wₕ, Vₕ)
 
 function _check_term_meshes(term, Ωₕ)
-    _check_centered_mesh(term, Ωₕ)
-    _check_source_mesh(term, Ωₕ)
+    _each_mesh_node(_check_centered_mesh, term, Ωₕ)
+    _each_mesh_node(_check_source_mesh, term, Ωₕ)
+    return nothing
+end
+
+# Calls `check(node, Ωₕ)` on every node of the term `op` the mesh checks read: a wrapper
+# before its operand, the two sides of a sum or product, never a product itself. The
+# operand of an `InterpolationNode` lives on another mesh, so it is not entered.
+_each_mesh_node(check::C, op, Ωₕ) where {C} = check(op, Ωₕ)
+_each_mesh_node(check::C, op::InterpolationNode, Ωₕ) where {C} = nothing
+
+function _each_mesh_node(check::C, op::UnaryWrapper, Ωₕ) where {C}
+    check(op, Ωₕ)
+    return _each_mesh_node(check, op.inner_op, Ωₕ)
+end
+
+function _each_mesh_node(
+        check::C, op::Union{OperatorAdd, LinearProduct, BilinearProduct}, Ωₕ) where {C}
+    _each_mesh_node(check, op.left_op, Ωₕ)
+    _each_mesh_node(check, op.right_op, Ωₕ)
     return nothing
 end
 
@@ -738,14 +752,6 @@ end
 end
 
 _check_centered_mesh(op, Ωₕ) = nothing
-_check_centered_mesh(op::InterpolationNode, Ωₕ) = nothing
-_check_centered_mesh(op::UnaryWrapper, Ωₕ) = _check_centered_mesh(op.inner_op, Ωₕ)
-
-function _check_centered_mesh(op::Union{OperatorAdd, LinearProduct, BilinearProduct}, Ωₕ)
-    _check_centered_mesh(op.left_op, Ωₕ)
-    _check_centered_mesh(op.right_op, Ωₕ)
-    return nothing
-end
 
 function _check_centered_mesh(
         op::Union{CenteredDifference{D, Dim}, CrossWeightedDifference{D, Dim}},
@@ -753,7 +759,7 @@ function _check_centered_mesh(
 ) where {D, Dim}
     n = npoints(Ωₕ, Tuple)[Dim]
     n >= 3 || _throw_centered_too_few_points(Dim, n)
-    return _check_centered_mesh(op.inner_op, Ωₕ)
+    return nothing
 end
 
 # --- Assembly implementations ----------------------------------------------------- #
@@ -771,15 +777,7 @@ function apply_dirichlet_conditions!(
 
     dirichlet_conditions === nothing && _throw_labels_without_conditions(dirichlet_labels)
 
-    if dirichlet_labels isa Symbol
-        dirichlet_bc!(
-            b,
-            test_space(form),
-            dirichlet_conditions,
-            dirichlet_labels;
-            components = dirichlet_components
-        )
-    elseif dirichlet_labels isa Tuple && !isempty(dirichlet_labels)
+    if !isempty(dirichlet_labels)
         dirichlet_bc!(
             b,
             test_space(form),
@@ -1677,9 +1675,9 @@ end
 # The shared core behind `assemble!` and `assemble`: takes `ast` positionally, the public
 # entry points passing `form.ast`, the device path its host-sourced copy (`_host_sources`).
 # Split on where the test space lives, a type-level choice the compiler folds away: a host
-# space sweeps `b` directly, a device one goes through a host buffer
-# (`_assemble_linear_device!`, below). The length check comes first, before any write and
-# before the device path builds its buffer.
+# space sweeps `b` directly, a device one goes through a host buffer (the `DeviceLocality`
+# method, below). The length check comes first, before any write and before the device
+# path builds its buffer.
 @inline function _assemble_linear!(
         b::AbstractVector, form::LinearForm, ast, dirichlet, dirichlet_components
 )
@@ -1689,37 +1687,13 @@ end
     )
 end
 
-@inline function _assemble_linear!(
-        ::DeviceLocality, b::AbstractVector, form::LinearForm, ast, dirichlet,
-        dirichlet_components
-)
-    return _assemble_linear_device!(b, form, ast, dirichlet, dirichlet_components)
-end
-
 function _assemble_linear!(
         ::HostLocality, b::AbstractVector, form::LinearForm, ast, dirichlet,
         dirichlet_components
 )
     dirichlet_labels, dirichlet_conditions = _normalize_dirichlet(dirichlet)
     fill!(b, zero(eltype(b)))
-    space = form.test_space
-    _validate_term_markers(ast, markers(mesh(space)), "the form's space")
-
-    # Two branches, not three: `CpuSerial` runs the serial core, and everything else goes
-    # to `_assemble_linear_parallel_core!`, whose own `_sweep_parallel!` computes the
-    # effective policy and dispatches to `Threads.@threads` for `CpuThreaded` or to the
-    # `_batch_*` hook for `CpuPolyester`. A `CpuPolyester` fast-fail used to sit here, on the
-    # reasoning that failing before the call chain was more honest; it was neither, since
-    # it fired even with Polyester loaded and the hooks implemented, so `assemble` on a
-    # `LinearForm` could never work under `CpuPolyester` at all. Without
-    # Polyester the hook still raises, one frame deeper, naming the package.
-    policy = execution_policy(space)
-    if policy isa CpuSerial
-        _assemble_linear_core!(b, space, ast)
-    else
-        _assemble_linear_parallel_core!(b, space, ast)
-    end
-
+    _assemble_add_linear!(HostLocality(), b, form.test_space, ast)
     apply_dirichlet_conditions!(
         b, form, dirichlet_conditions, dirichlet_labels, dirichlet_components
     )
@@ -1736,11 +1710,12 @@ end
 # and silently slow. The buffer and the mirrors are rebuilt on every call, so unlike the
 # host path this one allocates; a mirror is a snapshot, which is also what keeps live
 # coefficients live: a `SourceVector` over device storage is copied fresh each time.
-function _assemble_linear_device!(
-        b::AbstractVector, form::LinearForm{D}, ast, dirichlet, dirichlet_components
+function _assemble_linear!(
+        ::DeviceLocality, b::AbstractVector, form::LinearForm{D}, ast, dirichlet,
+        dirichlet_components
 ) where {D}
     hspace = _host_mirror_space(form.test_space)
-    hast = _host_sources(DeviceLocality(), ast)
+    hast = _host_sources(ast)
     hform = LinearForm{D, typeof(hspace), typeof(hast)}(hspace, hast)
     hb = Vector{eltype(b)}(undef, length(b))
     _assemble_linear!(HostLocality(), hb, hform, hast, dirichlet, dirichlet_components)
@@ -1788,13 +1763,6 @@ end
 # one fails loudly at its first scalar read rather than assembling wrong numbers.
 @inline _host_sources(op) = op
 
-# The 1-arg walk, tagged with the locality; its only caller is `_assemble_linear_device!`.
-@inline _host_sources(::DeviceLocality, op) = _host_sources(op)
-
-@inline _host_array(x) = x
-@inline _host_array(v::AbstractArray) = _host_array(locality(typeof(v)), v)
-@inline _host_array(::HostLocality, v::AbstractArray) = v
-@inline _host_array(::DeviceLocality, v::AbstractArray) = Array(v)
 # A host `VectorElement` stays itself, so a bilinear walk binding it (`stencil_eval.jl`)
 # keeps its type and copies nothing; only device storage is copied, to a plain `Vector`.
 @inline _host_array(v::VectorElement) = _host_array(locality(typeof(parent(v))), v)
@@ -1820,7 +1788,7 @@ end
 function _host_sources(op::LinearProduct{D, W}) where {D, W}
     left = _host_sources(op.left_op)
     right = _host_sources(op.right_op)
-    return LinearProduct{D, W, typeof(left), typeof(right)}(op.inner, left, right)
+    return LinearProduct{D, W}(op.inner, left, right)
 end
 
 # The nodes holding one `inner_op` and nothing to copy: `OperatorScale`, `ShiftNode`,

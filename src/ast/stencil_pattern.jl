@@ -66,22 +66,20 @@ function stencil_offsets(op::ShiftNode{D, Dim}) where {D, Dim}
     return _reach(stencil_offsets(op.inner_op), Val(Dim), (op.shift_amount,))
 end
 
-# scaling changes coefficients, not reach
-stencil_offsets(op::OperatorScale) = stencil_offsets(op.inner_op)
-stencil_offsets(op::GridFunctionScale) = stencil_offsets(op.inner_op)
+# Scaling changes coefficients, not reach. A restriction empties the stencil outside its
+# region and leaves it alone inside, so the reach is its child's wherever the operator
+# contributes at all. Listed rather than `UnaryWrapper`, so the tapped, shift,
+# interpolation and marked-function methods stay the more specific (gpena/Bramble.jl#930).
+function stencil_offsets(op::Union{OperatorScale, GridFunctionScale, RegionRestriction})
+    return stencil_offsets(op.inner_op)
+end
 
-# a restriction empties the stencil outside its region and leaves it alone inside, so the
-# reach is its child's wherever the operator contributes at all
-stencil_offsets(op::RegionRestriction) = stencil_offsets(op.inner_op)
-
-# A linear product contracts the left factor away (`multiply_stencils_linear` keeps only
-# the right offsets), so its reach is the test side's.
-stencil_offsets(op::LinearProduct) = stencil_offsets(op.right_op)
-
-# Row (test-side) reach only: its one caller, `_colour_strides` (`assembly/linear.jl`), needs
-# rows alone, because two writes collide only if row and column both coincide. The full
-# pattern is `_coord_walk!`'s (`assembly/bilinear_pattern.jl`).
-stencil_offsets(op::BilinearProduct) = stencil_offsets(op.right_op)
+# The test side's reach. A linear product contracts the left factor away
+# (`multiply_stencils_linear` keeps only the right offsets). A bilinear product answers its
+# row reach only: its one caller, `_colour_strides` (`assembly/linear.jl`), needs rows
+# alone, because two writes collide only if row and column both coincide. The full pattern
+# is `_coord_walk!`'s (`assembly/bilinear_pattern.jl`).
+stencil_offsets(op::Union{LinearProduct, BilinearProduct}) = stencil_offsets(op.right_op)
 
 function stencil_offsets(op::OperatorAdd)
     return sort!(union(stencil_offsets(op.left_op), stencil_offsets(op.right_op)))
@@ -128,9 +126,11 @@ _stencil_margin(op::TappedNode) = _stencil_margin(op.inner_op) + 1
 # rather than assume magnitude 1.
 _stencil_margin(op::ShiftNode) = _stencil_margin(op.inner_op) + abs(op.shift_amount)
 
-_stencil_margin(op::OperatorScale) = _stencil_margin(op.inner_op)
-_stencil_margin(op::GridFunctionScale) = _stencil_margin(op.inner_op)
-_stencil_margin(op::RegionRestriction) = _stencil_margin(op.inner_op)
+# Scales and restrictions pass their operand's margin through; listed for the same reason
+# as their `stencil_offsets` method.
+function _stencil_margin(op::Union{OperatorScale, GridFunctionScale, RegionRestriction})
+    return _stencil_margin(op.inner_op)
+end
 
 # Names an absolute column on another mesh via `locate_cell`, never a grid-relative offset on
 # the mesh being walked -- see `stencil_offsets(::InterpolationNode)` in `operators/interpolation.jl`.

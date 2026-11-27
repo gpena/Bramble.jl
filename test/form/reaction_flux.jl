@@ -249,6 +249,35 @@ _bytes(f, scratch, A, F, uₕ, marker) = @allocated f(scratch, A, F, uₕ; marke
         )
     end
 
+    # `components` and `dirichlet_components` are one keyword; both at once is refused.
+    @testset "components alias" begin
+        I = domain(interval(0.0, 1.0), :left => :xmin, :right => :xmax)
+        Wₕ = gridspace(mesh(I, 41, true))
+        W = Wₕ × Wₕ
+        a = form(W, W, (u, v) -> inner₊(∇ₕ(u(1)), ∇ₕ(v(1))) + inner₊(∇ₕ(u(2)), ∇ₕ(v(2))))
+        l = form(W, v -> innerₕ(Rₕ(Wₕ, x -> pi^2 * sin(pi * x[1])), v(1)) + innerₕ(Rₕ(Wₕ, x -> 2.0), v(2)))
+        A, F = assemble(a, l; dirichlet = :boundary => x -> 0.0)
+        uₕ = element(W)
+        uₕ .= A \ F
+        r1 = reaction(a, l, uₕ; marker = :left, dirichlet_components = 1)
+        r2 = reaction(a, l, uₕ; marker = :left, dirichlet_components = 2)
+        @test r1 != r2
+        Af, Ff = assemble(a), assemble(l)
+        for (c, r) in ((1, r1), (2, r2))
+            @test reaction(a, l, uₕ; marker = :left, components = c) == r
+            @test reaction(Af, Ff, uₕ; marker = :left, dirichlet_components = c) == r
+            @test reaction(Af, Ff, uₕ; marker = :left, components = c) == r
+            d = reaction_density(Af, Ff, uₕ; marker = :left, components = c)
+            @test reaction_density(Af, Ff, uₕ; marker = :left, dirichlet_components = c) == d
+            @test reaction_density(a, l, uₕ; marker = :left, components = c) == d
+            @test reaction_density(a, l, uₕ; marker = :left, dirichlet_components = c) == d
+        end
+        for f in (reaction, reaction_density)
+            @test_throws ArgumentError f(a, l, uₕ; marker = :left, components = 1, dirichlet_components = 1)
+            @test_throws ArgumentError f(Af, Ff, uₕ; marker = :left, components = 1, dirichlet_components = 2)
+        end
+    end
+
     # reaction_density is pointwise and an exported quantity.
     @testset "reaction_density: pointwise" begin
         sol(x) = sin(pi * x[1])
@@ -595,10 +624,10 @@ _bytes(f, scratch, A, F, uₕ, marker) = @allocated f(scratch, A, F, uₕ; marke
             @test filter(k -> masks[2][k], 1:n₁) == rows(Ω₁, :right, 0)
             @test (off, nn, active) == (0, n₁, true)
             for row in 1:n₁
-                @test Base.invokelatest(Bramble._reaction_row_marked, entries, row) ==
+                @test Base.invokelatest(Bramble._row_marked, entries, row) ==
                       (row in idx)
             end
-            @test !Base.invokelatest(Bramble._reaction_row_marked, (), 1)
+            @test !Base.invokelatest(Bramble._row_marked, (), 1)
 
             # the restricted residual answers r[j] at the marked rows
             rr = Base.invokelatest(Bramble._reaction_residual, A, F, u, entries)

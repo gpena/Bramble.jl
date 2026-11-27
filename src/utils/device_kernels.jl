@@ -157,3 +157,11 @@ end
     throw(ArgumentError("$op on $n entries is past the $(typemax(Int32)) that the device " *
                         "kernel's Int32 index arithmetic can address"))
 end
+
+# A host copy of an array whose storage may live on a device: anything that is not an array
+# is returned as it is, a host array too (no copy), and a device array is copied to an
+# `Array`. The `VectorElement` methods live in `src/assembly/linear.jl`, past the type.
+@inline _host_array(x) = x
+@inline _host_array(v::AbstractArray) = _host_array(locality(typeof(v)), v)
+@inline _host_array(::HostLocality, v::AbstractArray) = v
+@inline _host_array(::DeviceLocality, v::AbstractArray) = Array(v)

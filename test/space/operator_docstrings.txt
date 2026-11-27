@@ -1472,12 +1472,10 @@ difference of component `c` along direction `d`.
 
 The rows come in a `Bramble._GradientRows`, which is not a `Tuple`.
 `∇ₕ(u)[c][d]`, `length`, iteration, `map` and broadcasting give what they give on
-`∇ₕ(components(u))`, and `Tuple(∇ₕ(u))` is that tuple; anything else tuple-like needs
-`Tuple(∇ₕ(u))`. `map` needs every argument to be such a container; with a plain tuple
-among them, pass `Tuple(∇ₕ(u))`. The container also tells [`inner₊`](@ref) that row `c` is built on
-component `c` alone, so a captured coefficient over `inner₊(∇ₕ(u), ∇ₕ(v))` gives `form` one
-concrete type in 3D, which the plain tuple `∇ₕ(components(u))` does not; both assemble the
-same matrix. In 1D each row is the 1-tuple `(D₋ₓ(u(c)),)`, as in `∇ₕ(components(u))`,
+`∇ₕ(components(u))`. `Tuple(∇ₕ(u))` is that tuple, and anything else tuple-like needs it.
+`map` needs every argument to be such a container, so with a plain tuple among them, pass
+`Tuple(∇ₕ(u))`. [`inner₊`](@ref) of two of these containers builds the
+same sum as `inner₊` of the plain tuples `∇ₕ(components(u))` and `∇ₕ(components(v))`. In 1D each row is the 1-tuple `(D₋ₓ(u(c)),)`, as in `∇ₕ(components(u))`,
 so `∇ₕ(u)[c][1]` is that difference and the two spellings mix. On a scalar space
 (one component) this is the same `D`-tuple `∇ₕ` already returns for any
 operator.

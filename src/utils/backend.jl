@@ -47,10 +47,9 @@ not been taught otherwise about as host memory. Any array type subtyping
 `GPUArraysCore.AbstractGPUArray` answers `DeviceLocality()` generically, so a
 GPU package extension need not add its own method for that to hold -- Metal's
 `MtlVector`/`MtlMatrix` already subtype it, and any future CUDA/ROCm/oneAPI array type gets
-the right answer the same way, for free. `BrambleMetalExt` keeps its own
-`MtlVector`/`MtlMatrix`/sparse-matrix methods regardless: Julia dispatches to the more
-specific method, and those predate this generic one -- the same idiom as [`ka_device`](@ref):
-a method a package extension supplies for its own type, picked up automatically once loaded.
+the right answer the same way, for free. `BrambleMetalExt` adds methods only for its sparse
+matrix types, which are not `AbstractGPUArray` -- the same idiom as [`ka_device`](@ref): a
+method a package extension supplies for its own type, picked up automatically once loaded.
 
 For an [`ExecutionPolicy`](@ref), `locality` answers what the policy claims. A
 [`CpuPolicy`](@ref) claims [`HostLocality`](@ref) and a [`GpuPolicy`](@ref) claims
@@ -82,9 +81,8 @@ function locality end
 # `AbstractGPUArray` is the abstract supertype every GPU array type subtypes -- Metal.jl's
 # `MtlArray` among them -- so this one generic method answers `DeviceLocality()` for any
 # device array type without that backend's extension needing to redeclare it. Kept more
-# specific than the `AbstractArray` fallback above but strictly less specific than
-# `BrambleMetalExt`'s own `MtlVector`/`MtlMatrix`/sparse-matrix methods, which Julia still
-# dispatches to and which this change does not touch.
+# specific than the `AbstractArray` fallback above. `BrambleMetalExt` adds `locality`
+# methods only for the sparse types that are not `AbstractGPUArray`.
 
 @inline locality(::Type{<:GPUArraysCore.AbstractGPUArray}) = DeviceLocality()
 
@@ -557,42 +555,28 @@ the stated contract for the types that do.
 """
 supports_undef_construction(::Type{<:AbstractArray}) = true
 
-@noinline function _throw_vector_error(VT, n, undef_form::Bool)
-    tried = undef_form ? "$VT(undef, n)" : "$VT(n)"
-    other = undef_form ? "supports_undef_construction($VT) = false" :
-            "supports_undef_construction($VT) = true"
+@noinline function _throw_sized_error(AT, dims, undef_form::Bool)
+    kind = length(dims) == 1 ? "vector" : "matrix"
+    size = length(dims) == 1 ? "$(dims[1])" : "$(dims)"
+    args = join(("n", "m")[1:length(dims)], ", ")
+    tried = undef_form ? "$AT(undef, $args)" : "$AT($args)"
+    other = undef_form ? "supports_undef_construction($AT) = false" :
+            "supports_undef_construction($AT) = true"
     error(
-        "Cannot create vector of type $VT with size $n: $tried is not defined. Define it, or, if this type constructs the other way, declare Bramble.$other.",
+        "Cannot create $kind of type $AT with size $size: $tried is not defined. Define it, or, if this type constructs the other way, declare Bramble.$other.",
     )
 end
 
-@noinline function _throw_matrix_error(MT, n, m, undef_form::Bool)
-    tried = undef_form ? "$MT(undef, n, m)" : "$MT(n, m)"
-    other = undef_form ? "supports_undef_construction($MT) = false" :
-            "supports_undef_construction($MT) = true"
-    error(
-        "Cannot create matrix of type $MT with size ($n, $m): $tried is not defined. Define it, or, if this type constructs the other way, declare Bramble.$other.",
-    )
-end
-
-# The one place either constructor is chosen. `hasmethod` catches a type that declares the
-# trait it does not honour, which is the only failure left once the choice itself is static.
-@inline function _undef_or_sized(::Type{AT}, n::Integer, thrower) where {AT}
+# The one place either constructor is chosen, for a vector (`dims` of length 1) or a matrix
+# (length 2). `hasmethod` catches a type that declares the trait it does not honour, which
+# is the only failure left once the choice itself is static.
+@inline function _undef_or_sized(::Type{AT}, dims::Vararg{Integer, N}) where {AT, N}
     if supports_undef_construction(AT)
-        hasmethod(AT, Tuple{UndefInitializer, Int}) || thrower(AT, n, true)
-        return AT(undef, n)
+        hasmethod(AT, Tuple{UndefInitializer, Vararg{Int, N}}) || _throw_sized_error(AT, dims, true)
+        return AT(undef, dims...)
     end
-    hasmethod(AT, Tuple{Int}) || thrower(AT, n, false)
-    return AT(n)
-end
-
-@inline function _undef_or_sized(::Type{AT}, n::Integer, m::Integer, thrower) where {AT}
-    if supports_undef_construction(AT)
-        hasmethod(AT, Tuple{UndefInitializer, Int, Int}) || thrower(AT, n, m, true)
-        return AT(undef, n, m)
-    end
-    hasmethod(AT, Tuple{Int, Int}) || thrower(AT, n, m, false)
-    return AT(n, m)
+    hasmethod(AT, Tuple{Vararg{Int, N}}) || _throw_sized_error(AT, dims, false)
+    return AT(dims...)
 end
 
 """
@@ -611,7 +595,7 @@ the type alone.
 - `ErrorException`: If `VT` does not define the constructor its trait declares.
 """
 function vector(::Backend{VT, MT, EP}, n::Integer) where {VT, MT, EP}
-    return _undef_or_sized(VT, n, _throw_vector_error)
+    return _undef_or_sized(VT, n)
 end
 
 # Specialized zero-overhead method for standard Vector{T}
@@ -637,7 +621,7 @@ the type alone.
 - `ErrorException`: If `MT` does not define the constructor its trait declares.
 """
 function matrix(::Backend{VT, MT, EP}, n::Integer, m::Integer) where {VT, MT, EP}
-    return _undef_or_sized(MT, n, m, _throw_matrix_error)
+    return _undef_or_sized(MT, n, m)
 end
 
 # Specialized zero-overhead methods for `Matrix{T}` and sparse matrix types. Other
@@ -659,8 +643,7 @@ Construct an ``n \\times n`` identity matrix matching the matrix type configured
 @inline _backend_eye(::Type{<:SparseMatrixCSC{T, Ti}}, n::Integer) where {T, Ti} = SparseMatrixCSC{T, Ti}(I, n, n)
 @inline _backend_eye(::Type{<:Matrix{T}}, n::Integer) where {T} = Matrix{T}(I, n, n)
 function _backend_eye(::Type{MT}, n::Integer) where {T, MT <: AbstractMatrix{T}}
-    A = _undef_or_sized(MT, n, n, _throw_matrix_error)
-    fill!(A, zero(T))
+    A = _backend_zeros(MT, n)
     for i in 1:n
         A[i, i] = one(T)
     end
@@ -675,7 +658,7 @@ Construct an ``n \\times n`` zero matrix matching the matrix type configured in 
 @inline backend_zeros(backend::Backend, n::Integer) = _backend_zeros(matrix_type(backend), n)
 @inline _backend_zeros(::Type{<:SparseMatrixCSC{T, Ti}}, n::Integer) where {T, Ti} = spzeros(T, Ti, n, n)
 function _backend_zeros(::Type{MT}, n::Integer) where {T, MT <: AbstractMatrix{T}}
-    return fill!(_undef_or_sized(MT, n, n, _throw_matrix_error), zero(T))
+    return fill!(_undef_or_sized(MT, n, n), zero(T))
 end
 
 """
@@ -684,7 +667,6 @@ end
 
 Return the coordinate and scalar element type of vector type `VT` configured in `backend`.
 """
-@inline Base.eltype(backend::Backend{VT, MT, EP}) where {VT, MT, EP} = eltype(typeof(backend))
 @inline Base.eltype(::Type{<:Backend{VT, MT, EP}}) where {VT, MT, EP} = eltype(VT)
 
 function Base.show(io::IO, be::Backend{VT, MT, EP}) where {VT, MT, EP}
@@ -776,8 +758,8 @@ function metal_sparse_csc(A)
     )
 end
 
-# Test/mock hook: when set to a Bool, overrides _gpu_functional for testing device failure
-# without method overwriting (which emits compiler warnings).
+# Test/mock hook: when set to a Bool, `gpu_backend` uses it in place of `_gpu_functional`,
+# for testing device failure without method overwriting (which emits compiler warnings).
 const _gpu_functional_override = Ref{Union{Nothing, Bool}}(nothing)
 
 """
@@ -789,21 +771,18 @@ device, not merely that the corresponding package loaded.
 Defaults to `false` for every name: loading a GPU package extension (`using Metal`, and
 in future `using CUDA`/`using AMDGPU`) succeeds on any platform, whether or not that
 host actually has the accelerator's hardware and drivers -- it degrades gracefully
-rather than erroring. `ext/BrambleMetalExt.jl` overrides this for `Val(:metal)` with
-`Metal.functional()`, the one call that actually probes the device.
-[`gpu_backend`](@ref) requires both this and the extension being
-loaded.
+rather than erroring. `ext/BrambleMetalExt.jl` adds a method for `Val(:metal)` that answers
+`Metal.functional()`, the one call that actually probes the device. A method returns only
+its backend's own answer: [`gpu_backend`](@ref) reads the test hook
+`_gpu_functional_override` before it calls this. It requires both this and the extension
+being loaded.
 
 It is declared with the generic `::Val` signature (rather than `::Val{:metal}` itself) so that
 `BrambleMetalExt`'s own `Val(:metal)` method is strictly more specific than this stub --
 otherwise the extension's method would silently overwrite this one instead of adding to
 it, which precompilation reports as method overwriting.
 """
-function _gpu_functional(::Val)
-    override = _gpu_functional_override[]
-    override !== nothing && return override
-    return false
-end
+_gpu_functional(::Val) = false
 
 """
     gpu_backend(::Type{T} = Float32; policy::ExecutionPolicy = GpuKernel()) -> Backend
@@ -835,7 +814,9 @@ See also: [`metal_backend`](@ref), [`backend`](@ref).
 """
 function gpu_backend(T::Type = Float32; policy::ExecutionPolicy = GpuKernel())
     if Base.get_extension(Bramble, :BrambleMetalExt) !== nothing
-        _gpu_functional(Val(:metal)) || return _throw_metal_not_functional()
+        override = _gpu_functional_override[]
+        functional = override === nothing ? _gpu_functional(Val(:metal)) : override
+        functional || return _throw_metal_not_functional()
         return metal_backend(T; policy)
     end
     return _throw_no_gpu_backend()

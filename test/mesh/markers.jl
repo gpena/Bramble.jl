@@ -130,9 +130,9 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs, _half_spacing_oracle
 
     @testset "Zero-allocation marker setup (#124)" begin
         # `_ensure_geometric_markers!` and `_set_markers_symbols!` used to route every
-        # boundary-facet lookup through `boundary_symbol_to_dict`, allocating a fresh
-        # `Dict{Symbol, CartesianIndices}` per call just to iterate or index it once. Both
-        # now query `boundary_symbol_to_cartesian`'s `NamedTuple` directly, so that lookup
+        # boundary-facet lookup through a fresh `Dict{Symbol, CartesianIndices}` per call,
+        # built just to iterate or index it once. Both now query
+        # `boundary_symbol_to_cartesian`'s `NamedTuple` directly, so that lookup
         # itself is zero-allocation (checked below) and `_set_markers_symbols!` measures
         # 0 B.
         #
@@ -242,6 +242,18 @@ using ..TestUtils: alloc_test, WITH_3D_TESTS, @test_allocs, _half_spacing_oracle
         @test_allocs Bramble.boundary_indices(Bramble.indices(Ωₕ_2d))
         WITH_3D_TESTS && @test_allocs Bramble.boundary_indices(Bramble.indices(Ωₕ_3d))
         @test_allocs Bramble.boundary_symbol_to_cartesian(Bramble.indices(Ωₕ_1d))
+
+        # Every face row of `_boundary_faces` names its indexed face, by canonical name and alias
+        for (D, idxs) in ((1, CartesianIndices((1:3,))), (2, CartesianIndices((1:3, 1:4))),
+            (3, CartesianIndices((1:3, 1:4, 1:5))))
+            faces = Bramble.boundary_symbol_to_cartesian(idxs)
+            bounds = Bramble.boundary_indices(idxs)
+            @test length(faces) == 2 * length(Bramble._boundary_faces(Val(D)))
+            for (canonical, alias, axis, side) in Bramble._boundary_faces(Val(D))
+                @test faces[canonical] == bounds[2axis - 2 + side]
+                @test faces[alias] == bounds[2axis - 2 + side]
+            end
+        end
     end
 end
 
@@ -428,7 +440,6 @@ end
     @test Bramble.symbols(edm) === Bramble.symbols(dm)
     @test Bramble.tuples(edm) === Bramble.tuples(dm)
     @test Bramble.labels(edm) == (:l, :w, :c)
-    @test Bramble.label_identifiers(edm) == (:l, :w, :c)
     @test collect(Bramble.label_symbols(edm)) == [:l]
     @test collect(Bramble.label_tuples(edm)) == [:w]
     @test collect(Bramble.label_conditions(edm)) == [:c]

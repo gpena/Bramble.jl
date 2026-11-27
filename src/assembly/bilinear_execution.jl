@@ -424,33 +424,21 @@ end
 # transposed half on the second's: the same kernel, so nothing new is compiled when the
 # leaves share a type, and nothing is dispatched at run time.
 
-@inline function _replay_pair_segment!(
-        A::AbstractMatrix, term::TERM, sp, row_offset::Int, col_offset::Int,
-        segment::Segment, α1, α2, half::Int
-) where {TERM}
-    sink = _PairReplaySink(
-        A, segment.point_ptr, segment.positions, segment.positions_t, α1, α2, half
-    )
-    _visit_stencil!(
-        sink,
-        sink,
-        term,
-        sp,
-        row_offset,
-        col_offset
-    )
-    return nothing
-end
-
 # The serial leaves: one unit, one walk (`_visit_stencil!`). `p2`, the pair's second
 # bare product, and `offsets2`, its block's `(row_offset, col_offset)`, are unused here; the
 # threaded leaf needs `p2`'s reach to colour the sweep.
 @inline _replay_unit!(::_SerialReplay, A, term, sp, row_offset, col_offset, segment, α) = _replay_segment!(
     A, term, sp, row_offset, col_offset, segment, α)
-@inline _replay_pair_unit!(
-    ::_SerialReplay, A, p1, _p2, sp, row_offset, col_offset, _offsets2, segment, α1, α2,
-    half
-) = _replay_pair_segment!(A, p1, sp, row_offset, col_offset, segment, α1, α2, half)
+@inline function _replay_pair_unit!(
+        ::_SerialReplay, A::AbstractMatrix, p1, _p2, sp, row_offset::Int, col_offset::Int,
+        _offsets2, segment::Segment, α1, α2, half::Int
+)
+    sink = _PairReplaySink(
+        A, segment.point_ptr, segment.positions, segment.positions_t, α1, α2, half
+    )
+    _visit_stencil!(sink, sink, p1, sp, row_offset, col_offset)
+    return nothing
+end
 
 @noinline function _replay_pair!(
         mode::_ReplayMode, A::AbstractMatrix, t1, t2, sp, segments::Vector{Segment{D}},

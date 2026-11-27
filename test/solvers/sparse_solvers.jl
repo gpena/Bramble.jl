@@ -223,6 +223,18 @@ end
     @test collect(suitesparse_qr_solve(a, l; dirichlet = bc)) ≈ u_ref rtol = 1e-10
     @test pde_solve(A, F; solver = :spqr) ≈ u_ref rtol = 1e-10
 
+    # The form methods of the two backends without a `sym` keyword refuse `symmetrize` as the
+    # others do (gpena/Bramble.jl#948).
+    @test_throws ArgumentError suitesparse_qr_factorize(a; dirichlet = bc, symmetrize = true)
+    @test_throws ArgumentError sparspak_factorize(a; dirichlet = bc, symmetrize = true)
+    @test_throws ArgumentError sparspak_factorize(a; dirichlet = bc, bogus = 1)
+
+    # `_normalize_sym` reads the shared spellings; `_ext_fallback` names the package.
+    @test Bramble._normalize_sym.((:spd, :definite, 1, :symmetric, 2, :unsymmetric, 0, :auto, nothing, :x)) ==
+          (:spd, :spd, :spd, :symmetric, :symmetric, :unsymmetric, :unsymmetric, :auto, :auto, :unknown)
+    @test_throws ErrorException Bramble._ext_fallback(:BrambleNoSuchExt, "f", A)
+    @test_throws ArgumentError Bramble._ext_fallback(:BrambleSuiteSparseExt, "f", Matrix(A))
+
     # A dense matrix is not a sparse system: no method.
     @test_throws MethodError pde_solve(Matrix(A), F)
 end

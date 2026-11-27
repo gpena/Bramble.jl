@@ -178,7 +178,7 @@ end
 function _dterm(op::Union{TappedNode, ShiftNode}, w::_JFWalk)
     _check_other_fields(op, w, (:inner_op,), "a coefficient in the node's own data")
     d = _dterm(op.inner_op, w)
-    return d === nothing ? nothing : _rebuilt_around(op, d)
+    return d === nothing ? nothing : _rewrap_value(op, d)
 end
 
 # Unprobed (`()` outside the region): the zero stencil `form` may have stored is typed for
@@ -201,7 +201,7 @@ function _dterm(op::BilinearProduct{D, W}, w::_JFWalk) where {D, W}
     left, right = _jf_to_trial(op.left_op, op.right_op, w)
     d = _dterm(left, w)
     d === nothing && return nothing
-    return BilinearProduct{D, W, typeof(d), typeof(right)}(op.inner, d, right)
+    return BilinearProduct{D, W}(op.inner, d, right)
 end
 
 # The pair `(left, right)` with the test side's top scales moved onto the trial side, as

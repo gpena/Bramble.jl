@@ -126,16 +126,14 @@ function _ghost_dofs_by_node(Wₕ::GhostGridSpace)
     for J in physical_indices(G)
         count[plin[J]] > 0 && (nphys += 1)
     end
-    Et = sparse(transpose(E))                  # the rows of `E` as columns
+    Et = Wₕ.Et                                 # the rows of `E` as columns
     nodes, dofs = Int[], Int[]
     nlin = LinearIndices(npoints(physical_mesh(G), Tuple))
     j = nphys + 1
     for g in 1:nghosts(G)
         j > n && break
         p = plin[_ghost_point(G, g)]
-        r = nzrange(Et, p)
-        length(r) == 1 && rowvals(Et)[first(r)] == j && isone(nonzeros(Et)[first(r)]) ||
-            continue
+        _unit_dof(Et, p) == j || continue
         push!(nodes, nlin[first(boundary_node(G, g))])
         push!(dofs, j)
         j += 1

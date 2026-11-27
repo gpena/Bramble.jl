@@ -56,11 +56,3 @@ Pages = ["geometry/levelset.jl"]
 
 The validation and the three labels of a level-set marker are in the
 [Geometry API page](../api/geometry.md#Level-sets).
-
-## Pretty printing
-
-```@autodocs
-Modules = [Bramble]
-Public = false
-Pages = ["geometry/pretty_print.jl"]
-```

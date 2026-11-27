@@ -6,33 +6,38 @@
 # `block_of` converts to a block coordinate `(trial, test)` or validates. Routing by
 # leaf index supports arbitrary composite function spaces.
 
-"""
-    test_component_or_nothing(op) -> Union{Int, Nothing}
+# Each classifier family is one method set over the side, the `TestSide`/`TrialSide`
+# singletons of operators/interpolation.jl. `_component_class` (ast/simplifier.jl) reads them too.
 
-The component `op` is written against, or `nothing` when it names none.
-
-Used when assembling composite right-hand sides, where a term built from an indexed test
-function belongs to one block while a term built from an unindexed one belongs to all of them.
-Written as a query rather than catching an exception because it is evaluated once per
-term per assembly in time-stepping loops.
-"""
-test_component_or_nothing(op::IndexedTestFunction) = _component_index(op)
-# Every node wrapping one operand answers what that operand answers. One method instead of
-# thirteen registrations (gpena/Bramble.jl#52); see [`UnaryWrapper`](@ref).
-test_component_or_nothing(op::UnaryWrapper) = test_component_or_nothing(op.inner_op)
-test_component_or_nothing(op::LinearProduct) = test_component_or_nothing(op.right_op)
-test_component_or_nothing(op::BilinearProduct) = test_component_or_nothing(op.right_op)
+# One method set for the throwing query, over the side. Every node wrapping one operand
+# answers what that operand answers: one method instead of thirteen registrations
+# (gpena/Bramble.jl#52); see [`UnaryWrapper`](@ref).
+_component_or_nothing(::TestSide, op::IndexedTestFunction) = _component_index(op)
+_component_or_nothing(::TrialSide, op::IndexedTrialFunction) = _component_index(op)
+function _component_or_nothing(side, op::UnaryWrapper)
+    return _component_or_nothing(side, op.inner_op)
+end
+# A product answers for its test operand, and for its trial operand when it has one: a
+# `LinearProduct` has no trial side, so on the trial side it names none.
+function _component_or_nothing(
+        side::TestSide, op::Union{LinearProduct, BilinearProduct})
+    return _component_or_nothing(side, op.right_op)
+end
+function _component_or_nothing(side::TrialSide, op::BilinearProduct)
+    return _component_or_nothing(side, op.left_op)
+end
 # A sum inside one inner product, `innerₕ(uₕ, v + 2 * D₋ₓ(v) - Mₓ(v))`, is still one
 # term of the form, and every test leaf in it names the same component or none. So the
 # component of a sum is the component its sides agree on.
 #
 # Without this check the fallback returned `nothing` and the term broadcast to every block.
-function test_component_or_nothing(op::OperatorAdd)
-    l = test_component_or_nothing(op.left_op)
-    r = test_component_or_nothing(op.right_op)
+function _component_or_nothing(side, op::OperatorAdd)
+    l = _component_or_nothing(side, op.left_op)
+    r = _component_or_nothing(side, op.right_op)
     l === r && return l
     return _throw_mixed_components(l, r)
 end
+_component_or_nothing(::Any, ::Any) = nothing
 
 # Sides naming different components cannot be one term of one block:
 # `innerₕ(uₕ, v(1) + v(2))` is ill-formed, so an error is raised.
@@ -46,7 +51,17 @@ end
     )
 end
 
-test_component_or_nothing(::Any) = nothing
+"""
+    test_component_or_nothing(op) -> Union{Int, Nothing}
+
+The component `op` is written against, or `nothing` when it names none.
+
+Used when assembling composite right-hand sides, where a term built from an indexed test
+function belongs to one block while a term built from an unindexed one belongs to all of them.
+Written as a query rather than catching an exception because it is evaluated once per
+term per assembly in time-stepping loops.
+"""
+test_component_or_nothing(op) = _component_or_nothing(TestSide(), op)
 
 """
     trial_component_or_nothing(op) -> Union{Int, Nothing}
@@ -59,18 +74,7 @@ component from each side. A term naming neither is the same integrand in every d
 block; a term naming both is one block; and a term naming one but not the other is not
 something the mathematics can express, so it is an error rather than a guess.
 """
-trial_component_or_nothing(op::IndexedTrialFunction) = _component_index(op)
-trial_component_or_nothing(op::UnaryWrapper) = trial_component_or_nothing(op.inner_op)
-trial_component_or_nothing(op::BilinearProduct) = trial_component_or_nothing(op.left_op)
-
-function trial_component_or_nothing(op::OperatorAdd)
-    l = trial_component_or_nothing(op.left_op)
-    r = trial_component_or_nothing(op.right_op)
-    l === r && return l
-    return _throw_mixed_components(l, r)
-end
-
-trial_component_or_nothing(::Any) = nothing
+trial_component_or_nothing(op) = _component_or_nothing(TrialSide(), op)
 
 """
     block_of(term, nblocks_trial, nblocks_test) -> Union{Nothing, Tuple{Int, Int}}
@@ -174,17 +178,6 @@ struct _NamedBlock{TrialLeaves <: Tuple, TestLeaves <: Tuple}
     test_leaves::TestLeaves
     trial_component::Int
     test_component::Int
-end
-
-# jacobian_pattern.jl iterates `blocks` and reads `Block`'s fields off each element; for a
-# `_NamedBlock` they resolve at run time, which is cheap there: the pattern is built once, at
-# setup.
-function Base.getproperty(nb::_NamedBlock, name::Symbol)
-    name === :trial_leaf && return first(getfield(nb, :trial_leaves)[nb.trial_component])
-    name === :test_leaf && return first(getfield(nb, :test_leaves)[nb.test_component])
-    name === :row_offset && return last(getfield(nb, :test_leaves)[nb.test_component])
-    name === :col_offset && return last(getfield(nb, :trial_leaves)[nb.trial_component])
-    return getfield(nb, name)
 end
 
 # Homogeneous on both sides: the runtime index is concrete. Anything else defers the
@@ -461,34 +454,43 @@ end
 `NTuple{N, Int}`. Recurses exactly where [`_collect_region_labels`](@ref) does, so every
 label validated is bound. Labels are read as stored, no boundary alias resolved.
 """
-_bind_marker_ids(op, Ωₕ::AbstractMeshType) = op
+_bind_marker_ids(op, Ωₕ::AbstractMeshType) = _map_regions(r -> _region_ids(r, Ωₕ), op)
 
-function _bind_marker_ids(op::RegionRestriction{D}, Ωₕ::AbstractMeshType) where {D}
-    inner = _bind_marker_ids(op.inner_op, Ωₕ)
-    region = _region_ids(op.region, Ωₕ)
-    return _rebuild_restriction(op, region, inner)
+"""
+    _map_regions(f, op) -> LazyOp
+
+`op` rebuilt with each `RegionRestriction` region `r` replaced by `f(r)`, the restriction
+rebuilt by `_rebuild_restriction` so it keeps its zero stencil. Recurses exactly where
+[`_collect_region_labels`](@ref) does. [`_bind_marker_ids`](@ref) and the matrix-free tagging
+(`_MFBoundRegion`) are its two callers.
+"""
+_map_regions(f::F, op) where {F} = op
+
+function _map_regions(f::F, op::RegionRestriction{D}) where {F, D}
+    inner = _map_regions(f, op.inner_op)
+    return _rebuild_restriction(op, f(op.region), inner)
 end
 
-function _bind_marker_ids(op::UnaryWrapper, Ωₕ::AbstractMeshType)
-    return _rewrap_inner(op, _bind_marker_ids(op.inner_op, Ωₕ))
+function _map_regions(f::F, op::UnaryWrapper) where {F}
+    return _rewrap_inner(op, _map_regions(f, op.inner_op))
 end
 
-function _bind_marker_ids(op::OperatorAdd{D}, Ωₕ::AbstractMeshType) where {D}
-    left = _bind_marker_ids(op.left_op, Ωₕ)
-    right = _bind_marker_ids(op.right_op, Ωₕ)
+function _map_regions(f::F, op::OperatorAdd{D}) where {F, D}
+    left = _map_regions(f, op.left_op)
+    right = _map_regions(f, op.right_op)
     return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
 end
 
-function _bind_marker_ids(op::BilinearProduct{D, W}, Ωₕ::AbstractMeshType) where {D, W}
-    left = _bind_marker_ids(op.left_op, Ωₕ)
-    right = _bind_marker_ids(op.right_op, Ωₕ)
-    return BilinearProduct{D, W, typeof(left), typeof(right)}(op.inner, left, right)
+function _map_regions(f::F, op::BilinearProduct{D, W}) where {F, D, W}
+    left = _map_regions(f, op.left_op)
+    right = _map_regions(f, op.right_op)
+    return BilinearProduct{D, W}(op.inner, left, right)
 end
 
-function _bind_marker_ids(op::LinearProduct{D, W}, Ωₕ::AbstractMeshType) where {D, W}
-    left = _bind_marker_ids(op.left_op, Ωₕ)
-    right = _bind_marker_ids(op.right_op, Ωₕ)
-    return LinearProduct{D, W, typeof(left), typeof(right)}(op.inner, left, right)
+function _map_regions(f::F, op::LinearProduct{D, W}) where {F, D, W}
+    left = _map_regions(f, op.left_op)
+    right = _map_regions(f, op.right_op)
+    return LinearProduct{D, W}(op.inner, left, right)
 end
 
 @inline function _region_ids(label::Symbol, Ωₕ::AbstractMeshType)
@@ -517,11 +519,9 @@ end
     label -> _region_ids(label, Ωₕ), labels)
 
 # A `UnaryWrapper` rebuilt around `inner`: the type parameter its `inner_op` field is declared
-# with is replaced by `typeof(inner)`, every other field and parameter kept. Generated from
-# the type alone, so one method serves every wrapper, and an `inner` of the operand's own
-# type returns `op` itself.
-@generated function _rewrap_inner(op::T, inner::I) where {T, I}
-    fieldtype(T, :inner_op) === I && return :op
+# with is replaced by `typeof(inner)`, every other field and parameter kept. The expression
+# is built from the types alone, so one method serves every wrapper.
+function _rewrap_call(T, I)
     wrapper = Base.typename(T).wrapper
     decl = fieldtype(Base.unwrap_unionall(wrapper), :inner_op)
     params = Any[T.parameters...]
@@ -530,4 +530,18 @@ end
         f === :inner_op ? :inner : :(getfield(op, $(QuoteNode(f))))
     end
     return :($(wrapper{params...})($(args...)))
+end
+
+# `op` rebuilt around `inner`, or `op` itself when `inner` has the operand's own type. A pass
+# that changes values without changing types (`_retarget`, `_rebind`, `component`) needs
+# `_rewrap_value` instead.
+@generated function _rewrap_inner(op::T, inner::I) where {T, I}
+    return fieldtype(T, :inner_op) === I ? :op : _rewrap_call(T, I)
+end
+
+# `op` rebuilt around `inner`, or `op` itself when `inner` is its operand (`===`). Both
+# branches have one type, so inference is the same as for the rebuild alone.
+@generated function _rewrap_value(op::T, inner::I) where {T, I}
+    fieldtype(T, :inner_op) === I || return _rewrap_call(T, I)
+    return :(inner === op.inner_op ? op : $(_rewrap_call(T, I)))
 end

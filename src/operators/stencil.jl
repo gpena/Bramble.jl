@@ -38,14 +38,6 @@ end
 
 @noinline _throw_stencil_symbol_error(d::Symbol) = throw(ArgumentError("the stencil direction must be :x, :y or :z, got :$d"))
 
-@noinline function _throw_stencil_size_error(lout::Int, lin::Int, dims)
-    throw(
-        DimensionMismatch(
-        "out has $lout entries and in has $lin, but the grid $(dims) has $(prod(dims))"
-    ),
-    )
-end
-
 # Every stencil reads a neighbour of the coordinate it writes, and the traversal is a
 # single contiguous pass: aliased destination and source would overwrite an entry before
 # the interior point that still needs it as a neighbour has been computed, corrupting every
@@ -543,12 +535,7 @@ function _vectorial_index_expr(alias_name, alias_stem, source)
             i == 3 && return $stem_z
             throw(BoundsError($alias_name, i))
         end),
-        :(@inline function Base.getindex(::typeof($alias_name), s::Symbol)
-            s === :x && return $stem_x
-            s === :y && return $stem_y
-            s === :z && return $stem_z
-            throw(ArgumentError("the coordinate direction must be :x, :y or :z, got :$s"))
-        end)
+        :(@inline Base.getindex(a::typeof($alias_name), s::Symbol) = a[$(_dim_index)(s)])
     ]
     return Expr[_relocate!(e, source) for e in exprs]
 end
@@ -713,7 +700,6 @@ dimensional entry point `dispatch_alias(arg, d)`, and, when `vectorial_alias` is
 `D₋ₓ`, `D₋ᵧ`, `D₋₂` and `D₋(uₕ, d)`. The averages pass their tuple-valued alias instead, so
 that the family gains a direction argument without minting a bare `M` -- the single most
 common local name in finite-element code, and one `using Bramble` would then reserve.
-Passing `nothing` skips the entry point altogether.
 
 The five note keywords are prose templates rather than finished sentences: each may carry
 `{direction}` and `{suffix}`, substituted per alias by [`_subst`](@ref). They were closures
@@ -787,21 +773,19 @@ function _operator_aliases_expr(
         )
     end
 
-    if dispatch_alias !== nothing
-        append!(
-            exprs,
-            _dimensional_expr(
-                base_name,
-                dispatch_alias,
-                alias_stem,
-                dir_string,
-                what,
-                formula;
-                opening_sentence,
-                source
-            )
+    append!(
+        exprs,
+        _dimensional_expr(
+            base_name,
+            dispatch_alias,
+            alias_stem,
+            dir_string,
+            what,
+            formula;
+            opening_sentence,
+            source
         )
-    end
+    )
 
     vectorial_alias === nothing && return exprs
     append!(

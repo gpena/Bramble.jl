@@ -6,14 +6,14 @@ Additive accumulation into an already-filled matrix or vector (gpena/Bramble.jl#
 ## Why this needed no new sink or traversal
 
 `assemble!`'s own sweep already *adds* every stencil entry's weight into `A.nzval`/`b`
-(`add_to_sparse!`, and every sink in `bilinear_traversal.jl`) -- that is what lets two
+(every sink in `bilinear_traversal.jl`) -- that is what lets two
 stencil taps that land on the same matrix entry accumulate correctly within one term. The
 only thing that makes `assemble!` read as "replace" from the outside is the `fill!(A/b,
 0)` immediately before that sweep (`_assemble_bilinear!`/`_assemble_linear!`). `assemble_add!`
 is therefore the *same* serial-cached/parallel core `assemble!` already calls, minus that
 `fill!` and minus the Dirichlet pass -- reusing the coordinate-walk/replay cache, the threaded
 band-coloured sweep, and the "pattern must already contain this entry" error
-(`add_to_sparse!`'s `ArgumentError`) exactly as they already existed.
+(`_throw_missing_pattern_entry`'s `ArgumentError`) exactly as they already existed.
 
 ## The scale factor
 
@@ -164,7 +164,15 @@ function assemble_add!(F::AbstractVector, l::LinearForm, α)
 end
 
 # `αv...` is empty for the unscaled call, so the host cores see exactly the arguments they
-# did before the locality split.
+# did before the locality split. `assemble!` sweeps through here too, after its `fill!`.
+# Two branches, not three: `CpuSerial` runs the serial core, and everything else goes
+# to `_assemble_linear_parallel_core!`, whose own `_sweep_parallel!` computes the
+# effective policy and dispatches to `Threads.@threads` for `CpuThreaded` or to the
+# `_batch_*` hook for `CpuPolyester`. A `CpuPolyester` fast-fail used to sit in `assemble!`,
+# on the reasoning that failing before the call chain was more honest; it was neither,
+# since it fired even with Polyester loaded and the hooks implemented, so `assemble` on a
+# `LinearForm` could never work under `CpuPolyester` at all. Without
+# Polyester the hook still raises, one frame deeper, naming the package.
 function _assemble_add_linear!(::HostLocality, F::AbstractVector, space, ast, αv...)
     _validate_term_markers(ast, markers(mesh(space)), "the form's space")
     if execution_policy(space) isa CpuSerial
@@ -176,7 +184,7 @@ function _assemble_add_linear!(::HostLocality, F::AbstractVector, space, ast, α
 end
 
 # A device test space: `F`'s current values come to the host, the form's contribution is
-# added there on a host mirror of the space (`_assemble_linear_device!` in linear.jl), and
+# added there on a host mirror of the space (as `assemble!` does in linear.jl), and
 # the sum goes back in one `copyto!`, so the accumulation holds without a device scatter.
 function _assemble_add_linear!(::DeviceLocality, F::AbstractVector, space, ast, αv...)
     hF = Array(_vector_storage(F))

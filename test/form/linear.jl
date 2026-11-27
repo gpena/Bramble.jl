@@ -1180,10 +1180,10 @@ end
     # anything is assembled
     @test_throws ArgumentError assemble(form(Wₕ, v -> innerₕ(uₕ, v)); dirichlet = 3)
 
-    # `apply_dirichlet_conditions!` takes a lone label `Symbol` as well as a Tuple of
-    # them, from callers that normalised the labels themselves
+    # `apply_dirichlet_conditions!` takes the labels as `_normalize_dirichlet` hands
+    # them, a Tuple, from callers that normalised the labels themselves
     lsym = form(Wₕ, v -> innerₕ(uₕ, v))
-    b_sym = apply_dirichlet_conditions!(copy(plain), lsym, bcs, :bottom)
+    b_sym = apply_dirichlet_conditions!(copy(plain), lsym, bcs, (:bottom,))
     @test b_sym ≈ b
     @test b_sym[.!marked] ≈ plain[.!marked]
 end

@@ -6,8 +6,7 @@
 # - `is_uniform`: uniform-spacing check.
 # - `Base.size`, `Base.length`, `Base.axes`, `Base.firstindex`, `Base.lastindex`,
 #   `Base.iterate`: the collection interface over mesh points.
-# - `stepsize`, `locate_cell`, `normal_vector`: constant-spacing, cell lookup, and boundary
-#   normal queries.
+# - `locate_cell`, `normal_vector`: cell lookup and boundary normal queries.
 #
 # See also: `Mesh1D`, `MeshnD`
 
@@ -32,22 +31,11 @@ its [`Mesh1DState`](@ref) stores, computed whenever the points change
 always rescans the spacings.
 """
 function is_uniform(Ωₕ::AbstractMeshType{1}; tol = nothing)
-    tol === nothing && return _stored_uniform(Ωₕ)
+    tol === nothing && return _walk_mesh(Ωₕ(1)).uniform
     h = host_spacings(Ωₕ)
     n = length(h)
     n <= 1 && return true
     return _uniform_scan(h, h[1], tol, n)
-end
-
-@inline _stored_uniform(Ωₕ::AbstractMeshType{1}) = _walk_mesh(Ωₕ(1)).uniform
-
-# The default-tolerance answer for the host spacings `h` of a mesh of element type `T` whose
-# end points have magnitude at most `mag`: what a `Mesh1DState` stores as `uniform`.
-@inline function _uniform_at_default_tol(h, ::Type{T}, mag) where {T}
-    n = length(h)
-    n <= 1 && return true
-    h_ref = h[1]
-    return _uniform_scan(h, h_ref, _default_is_uniform_tol(T, h_ref, n, mag), n)
 end
 
 @inline function _uniform_scan(h, h_ref, atol, n)
@@ -183,32 +171,6 @@ end
 #------------------------------------------------------------------------------------------#
 
 """
-    stepsize(Ωₕ::AbstractMeshType) -> Union{Real, NTuple{D, Real}}
-    stepsize(Ωₕ::AbstractMeshType, d::Integer) -> Real
-
-Return the constant stepsize for a uniform mesh.
-  - In 1D, returns scalar ``h = x_2 - x_1``.
-  - In nD, returns a tuple ``(h_1, \\dots, h_D)`` of stepsizes along each coordinate axis.
-  - When `d` is specified, returns the stepsize along dimension `d`.
-
-Throws an `ArgumentError` if the mesh is not uniform.
-
-See also: [`is_uniform`](@ref), [`spacing`](@ref).
-"""
-@inline function stepsize(Ωₕ::AbstractMeshType{1})
-    is_uniform(Ωₕ) || _throw_not_uniform()
-    h = host_spacings(Ωₕ)
-    length(h) <= 1 && return zero(eltype(Ωₕ))
-    return h[2]
-end
-
-@inline function stepsize(Ωₕ::AbstractMeshType{D}) where {D}
-    return ntuple(i -> stepsize(Ωₕ(i)), Val(D))
-end
-
-@inline stepsize(Ωₕ::AbstractMeshType, d::Integer) = stepsize(Ωₕ(d))
-
-"""
     locate_cell(Ωₕ::AbstractMeshType{1}, x::Real) -> Int
     locate_cell(Ωₕ::AbstractMeshType{D}, x) -> CartesianIndex{D}
 
@@ -242,13 +204,6 @@ function locate_cell end
 
 @inline function locate_cell(Ωₕ::AbstractMeshType{1}, x::Tuple{Real})
     x1 = x[1]
-    return locate_cell(Ωₕ, x1)
-end
-
-@inline function locate_cell(Ωₕ::AbstractMeshType{1}, x::AbstractVector)
-    @boundscheck length(x) == 1 ||
-                 throw(DimensionMismatch("locate_cell expected a length-1 vector, got length $(length(x))"))
-    x1 = @inbounds x[1]
     return locate_cell(Ωₕ, x1)
 end
 
@@ -422,7 +377,7 @@ face is a single point and its own interior.
 """
 @inline function _marked_face_mask(Ωₕ::AbstractMeshType{D}, marked_at) where {D}
     idxs = indices(Ωₕ)
-    faces = boundary_indices(idxs)
+    faces = boundary_indices(Ωₕ)
     return ntuple(Val(D)) do d
         (_face_is_marked(marked_at, idxs, faces[2d - 1], d),
             _face_is_marked(marked_at, idxs, faces[2d], d))
@@ -493,18 +448,24 @@ end
     return false
 end
 
+# The physical box of a mesh inside its index space: the point counts and the offset of its
+# first node. A ghost mesh narrows both to the nodes it pads; any other mesh is its own box.
+@inline _physical_counts(Ωₕ::AbstractMeshType) = npoints(Ωₕ, Tuple)
+@inline _physical_shift(::AbstractMeshType{D}) where {D} = zero(CartesianIndex{D})
+
 # Walks the set bits of each marker alone (`findnext` skips empty chunks), so a marker on a
 # large mesh costs its marked points, not a dictionary lookup per grid point.
 @inline function _check_marked_on_faces(
         Ωₕ::AbstractMeshType{D}, m, labels, mask, caller) where {D}
     cis = indices(Ωₕ)
-    np = npoints(Ωₕ, Tuple)
+    np = _physical_counts(Ωₕ)
+    shift = _physical_shift(Ωₕ)
     for s in labels
         b = get(m, s, nothing)
         b === nothing && continue
         k = findfirst(b)
         while k !== nothing
-            _on_mask_face(mask, cis[k], np) || _throw_markers_not_faces(m, labels, caller)
+            _on_mask_face(mask, cis[k] - shift, np) || _throw_markers_not_faces(m, labels, caller)
             k = findnext(b, k + 1)
         end
     end
@@ -539,7 +500,7 @@ It fires on a 2x2 mesh of the square asked for `:boundary`, and on any mesh too 
 separate the two ends of an axis; it never fires with three or more points on every axis.
 """
 @inline function _check_surface_is_thin(Ωₕ::AbstractMeshType{D}, mask) where {D}
-    np = npoints(Ωₕ, Tuple)
+    np = _physical_counts(Ωₕ)
     for d in 1:D
         mask[d][1] && mask[d][2] && np[d] <= 2 && _throw_surface_not_thin(d, np[d])
     end

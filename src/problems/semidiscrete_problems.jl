@@ -14,6 +14,7 @@
 """
     ode_function(sd::Semidiscretization; kwargs...) -> ODEFunction
     ode_function(a::BilinearForm, l::LinearForm; kwargs...) -> ODEFunction
+    ode_function(a::Bramble.GhostBilinearForm, l::Bramble.GhostLinearForm; kwargs...) -> ODEFunction
 
 Wrap a semidiscretisation as an `ODEFunction` carrying its mass matrix, Jacobian and
 sparsity, ready for `OrdinaryDiffEq`. On a `csr_backend()` the solver receives
@@ -21,7 +22,7 @@ sparsity, ready for `OrdinaryDiffEq`. On a `csr_backend()` the solver receives
 factorizes a `SparseMatrixCSR`.
 
 The two-form method builds the [`Semidiscretization`](@ref) first, forwarding every keyword
-to [`semidiscretize`](@ref).
+to [`semidiscretize`](@ref). It takes a ghost pair like [`ode_problem`](@ref) does.
 
 # Keywords
 - `jacobian`: `jacobian!` (the default) to hand the solver the exact `-A`, or `nothing` to let it build one by automatic differentiation from `jac_prototype`.
@@ -56,7 +57,7 @@ end
 # `@constprop` carries a literal `reassemble` through `kwargs...` into `semidiscretize`, which
 # lifts it into the `Semidiscretization` type; without it the result is a `UnionAll` (#981).
 Base.@constprop :aggressive function ode_function(
-        a::BilinearForm, l::LinearForm;
+        a::_AnyBilinearForm, l::Union{LinearForm, GhostLinearForm};
         jacobian = jacobian!, jac_prototype = nothing, tgrad = nothing, kwargs...
 )
     sd = semidiscretize(a, l; kwargs...)

@@ -43,8 +43,37 @@ function _check_usable(fact::ConcreteSparspakFactorization)
     return nothing
 end
 
-Base.size(fact::ConcreteSparspakFactorization) = (fact.dim, fact.dim)
-Base.size(fact::ConcreteSparspakFactorization, d::Integer) = d <= 2 ? fact.dim : 1
+for T in (:ConcreteSparspakFactorization,)
+    @eval begin
+        Base.size(fact::$T) = (fact.dim, fact.dim)
+        Base.size(fact::$T, d::Integer) = d <= 2 ? fact.dim : 1
+
+        # Disambiguates the two equally specific candidates for a `VectorElement` destination:
+        # Bramble's generic `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` and
+        # the `ldiv!(::AbstractVector, ::$T, ::AbstractVector)` of this extension.
+        # `VectorElement <: AbstractVector` and `$T <: Factorization`, so neither is more
+        # specific and `ldiv!(uₕ, fact, F)` would otherwise be an ambiguity error. Takes
+        # Bramble's method, so a `Dual` load (`BrambleForwardDiffExt`) is split into parts
+        # the same way on every backend.
+        function LinearAlgebra.ldiv!(
+                uₕ::Bramble.VectorElement, fact::$T, b::AbstractVector
+        )
+            return invoke(
+                ldiv!, Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector},
+                uₕ, fact, b)
+        end
+
+        # `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
+        # factorizations against a complex right-hand side, and `$T <: Factorization`, so
+        # that method and the `\` of this extension are equally specific for a complex
+        # vector -- the call would be ambiguous without this one.
+        function Base.:\(
+                fact::$T{S}, b::Vector{Complex{S}}
+        ) where {S <: Union{Float32, Float64}}
+            return complex.(fact \ real(b), fact \ imag(b))
+        end
+    end
+end
 
 # Sparspak never throws `SingularException`. A rank-deficient or structurally singular
 # matrix reaches an internal `error("An empty problem. No matrix.")` (its n == 0 guard, hit
@@ -103,12 +132,8 @@ function LinearAlgebra.ldiv!(
 )
     _check_usable(fact)
     n = fact.dim
-    length(b) == n || throw(
-        DimensionMismatch("Right-hand side length $(length(b)) does not match matrix dimension $n"),
-    )
-    length(x) == n || throw(
-        DimensionMismatch("Output vector length $(length(x)) does not match matrix dimension $n"),
-    )
+    Bramble._check_rhs(b, n)
+    Bramble._check_rhs(x, n, "Output vector length")
     finite_rhs = all(isfinite, b)
     _singular_on_empty(() -> ldiv!(x, fact.lu, b), n)
     return _check_finite_solution(x, finite_rhs)
@@ -119,26 +144,10 @@ function LinearAlgebra.ldiv!(
 )
     _check_usable(fact)
     n = fact.dim
-    length(b) == n || throw(
-        DimensionMismatch("Vector length $(length(b)) does not match matrix dimension $n"),
-    )
+    Bramble._check_rhs(b, n, "Vector length")
     finite_rhs = all(isfinite, b)
     _singular_on_empty(() -> ldiv!(fact.lu, b), n)
     return _check_finite_solution(b, finite_rhs)
-end
-
-# Disambiguates the two equally specific candidates for a `VectorElement` destination:
-# Bramble's generic `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` and the
-# `ldiv!(::AbstractVector, ::ConcreteSparspakFactorization, ::AbstractVector)` above.
-# `VectorElement <: AbstractVector` and `ConcreteSparspakFactorization <: Factorization`, so
-# neither method is more specific and `ldiv!(uₕ, fact, F)` would otherwise be an ambiguity
-# error. Takes Bramble's method, so a `Dual` load (`BrambleForwardDiffExt`) is split
-# into parts the same way on every backend.
-function LinearAlgebra.ldiv!(
-        uₕ::Bramble.VectorElement, fact::ConcreteSparspakFactorization, b::AbstractVector
-)
-    return invoke(ldiv!, Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector},
-        uₕ, fact, b)
 end
 
 # Sparspak's triangular solve takes a right-hand side of the matrix's own element type only,
@@ -263,21 +272,9 @@ function _split_wrapper(S::DataType, T::DataType, R::DataType)
     return reduce(vcat, blocks)
 end
 
-# `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
-# factorizations against a complex right-hand side, and `ConcreteSparspakFactorization <:
-# Factorization`, so that method and the one above are equally specific for a complex vector
-# -- the call would be ambiguous without this one.
-function Base.:\(
-        fact::ConcreteSparspakFactorization{T}, b::Vector{Complex{T}}
-) where {T <: Union{Float32, Float64}}
-    return complex.(fact \ real(b), fact \ imag(b))
-end
-
 function Bramble.sparspak_refactor!(fact::ConcreteSparspakFactorization, A::SparseMatrixCSC)
-    m, n = size(A)
-    (m == fact.dim && n == fact.dim) || throw(
-        DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
-    )
+    Bramble._check_refactor_size(A, fact.dim)
+    n = fact.dim
     # Sparspak compares `A` with `lu.p`, which aliases the matrix last factored, so a pattern
     # changed in place on that matrix passes its check; the private copy catches it.
     (SparseArrays.getcolptr(A) == fact.matrix.colptr && SparseArrays.rowvals(A) ==
@@ -309,12 +306,7 @@ function Bramble._sparspak_solve(A::SparseMatrixCSC, F::AbstractVector)
     T, S = eltype(A), promote_type(eltype(A), eltype(F))
     # A load with no split into parts of type `T` is solved against `A` at its own type.
     A′ = S === T || _parts(S, T) !== nothing ? A : SparseMatrixCSC{S}(A)
-    fact = Bramble._sparspak_factorize(A′)
-    return fact \ F
-end
-
-function LinearAlgebra.factorize(A::SparseMatrixCSC, ::Type{SparspakFactorization})
-    return Bramble._sparspak_factorize(A)
+    return Bramble._form_solve(Bramble._sparspak_factorize, A′, F)
 end
 
 function LinearAlgebra.factorize(A::SparseMatrixCSC, ::Type{<:SparspakFactorization})

@@ -217,26 +217,28 @@ Base.@constprop :aggressive function semidiscretize(
 
     jf = _sd_jacobian_form(a, coefficients, labels, l, mass)
     A = assemble(a; dirichlet = labels, dirichlet_components = dirichlet_components)
+
+    return _semidiscretization(
+        a, l, sp, A, mass, labels, constraints, dirichlet_components, state,
+        _wrap_update(update_coefficients!, hook_reads_state),
+        Val(reassemble || jf !== nothing), jf
+    )
+end
+
+# What the two `semidiscretize` methods share once the operator matrix `A` is assembled:
+# the mass matrix, the source buffer sized from `A`, and the struct. `reassemble` arrives as
+# a `Val` that each caller builds under its own `@constprop :aggressive` (#981).
+function _semidiscretization(
+        operator, l, sp, A, mass, labels, constraints, dirichlet_components, state, update,
+        reassemble::Val, jf
+)
     M = _assemble_mass_matrix(
         mass === nothing ? _default_mass_form(sp) : mass, labels, dirichlet_components
     )
     F = parent(element(sp, eltype(A)))
-
     return Semidiscretization(
-        a,
-        l,
-        sp,
-        A,
-        M,
-        F,
-        constraints,
-        labels === nothing ? () : labels,
-        dirichlet_components,
-        state,
-        _wrap_update(update_coefficients!, hook_reads_state),
-        Val(reassemble || jf !== nothing),
-        Dict{DataType, Any}(),
-        jf
+        operator, l, sp, A, M, F, constraints, labels === nothing ? () : labels,
+        dirichlet_components, state, update, reassemble, Dict{DataType, Any}(), jf
     )
 end
 
@@ -348,25 +350,9 @@ Base.@constprop :aggressive function semidiscretize(
     # `operator_matrix(sd)` returns: a step at `typeof(t0)` refills it in place.
     operator = TypeCachedOperator(build, typeof(t0), (a0, refill0!, A0))
 
-    M = _assemble_mass_matrix(
-        mass === nothing ? _default_mass_form(sp) : mass, labels, dirichlet_components
-    )
-    F = parent(element(sp, eltype(A0)))
-
-    return Semidiscretization(
-        operator,
-        l,
-        sp,
-        A0,
-        M,
-        F,
-        constraints,
-        labels === nothing ? () : labels,
-        dirichlet_components,
-        state,
-        _wrap_update(update_coefficients!),
-        Val(reassemble),
-        Dict{DataType, Any}()
+    return _semidiscretization(
+        operator, l, sp, A0, mass, labels, constraints, dirichlet_components, state,
+        _wrap_update(update_coefficients!), Val(reassemble), nothing
     )
 end
 
@@ -423,10 +409,10 @@ end
 # leaf by leaf the same mesh (`_same_mesh`: the same object, or one with the same points), so
 # two `gridspace` calls over one mesh pass but same-sized meshes with other points do not.
 function _validate_semidiscrete_spaces(
-        a::BilinearForm, l::LinearForm; mass = nothing, name = "a"
+        a::BilinearForm, l::LinearForm; mass = nothing
 )
     sp = test_space(l)
-    _validate_form_space(a, name, sp)
+    _validate_form_space(a, "a", sp)
     mass === nothing || _validate_form_space(mass, "mass", sp)
     return nothing
 end
@@ -554,11 +540,7 @@ end
 # The twin of `sd` at element type `T`, built at the first call there. Untyped, so the
 # barrier keeps it out of the residual's typed path.
 @noinline function _state_twin(sd::Semidiscretization, ::Type{T}) where {T}
-    twin = get(sd.twins, T, nothing)
-    twin === nothing || return twin
-    twin = _build_state_twin(sd, T)
-    sd.twins[T] = twin
-    return twin
+    return get!(() -> _build_state_twin(sd, T), sd.twins, T)
 end
 
 # A state buffer of type `T` holding the state's values (the pattern walk of a new matrix
@@ -683,9 +665,8 @@ end
 end
 
 # The state at `t`: a plain state ignores it, a ghost space's lifts `u` at `t`.
-@inline _sync_state!(state, u, t) = _sync_state!(state, u)
-@inline _sync_state!(::Nothing, u) = nothing
-@inline function _sync_state!(state, u)
+@inline _sync_state!(::Nothing, u, t...) = nothing
+@inline function _sync_state!(state, u, t...)
     copyto!(parent(state), u)
     return nothing
 end
@@ -757,29 +738,11 @@ end
 # `semidiscretize` normalised once, rather than through `assemble!`'s `dirichlet` keyword,
 # which would normalise them again on every step.
 @inline function _assemble_source!(
-        F::AbstractVector, sd, c::StaticConstraints, p, t
+        F::AbstractVector, sd, c::_ValueConstraints, p, t
 )
     assemble!(F, sd.source)
     return apply_dirichlet_conditions!(
-        F, sd.source, c.constraints, sd.labels, sd.components
-    )
-end
-
-@inline function _assemble_source!(
-        F::AbstractVector, sd, c::TimeDependentConstraints, p, t
-)
-    assemble!(F, sd.source)
-    return apply_dirichlet_conditions!(
-        F, sd.source, c.constraints(t), sd.labels, sd.components
-    )
-end
-
-@inline function _assemble_source!(
-        F::AbstractVector, sd, c::TimeParamDependentConstraints, p, t
-)
-    assemble!(F, sd.source)
-    return apply_dirichlet_conditions!(
-        F, sd.source, c.constraints(t, p), sd.labels, sd.components
+        F, sd.source, _constraints_at(c, t, p), sd.labels, sd.components
     )
 end
 

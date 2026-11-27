@@ -42,8 +42,37 @@ function _umfpack_type(A::SparseMatrixCSC{T, Ti}) where {T, Ti}
     UMFPACK.UmfpackLU{T <: Complex ? ComplexF64 : Float64, Ti === Int32 ? Int32 : Int64}
 end
 
-Base.size(fact::ConcreteSuiteSparseFactorization) = (fact.dim, fact.dim)
-Base.size(fact::ConcreteSuiteSparseFactorization, d::Integer) = d <= 2 ? fact.dim : 1
+for T in (:ConcreteSuiteSparseFactorization,)
+    @eval begin
+        Base.size(fact::$T) = (fact.dim, fact.dim)
+        Base.size(fact::$T, d::Integer) = d <= 2 ? fact.dim : 1
+
+        # Disambiguates the two equally specific candidates for a `VectorElement` destination:
+        # Bramble's generic `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` and
+        # the `ldiv!(::AbstractVector, ::$T, ::AbstractVector)` of this extension.
+        # `VectorElement <: AbstractVector` and `$T <: Factorization`, so neither is more
+        # specific and `ldiv!(uₕ, fact, F)` would otherwise be an ambiguity error. Takes
+        # Bramble's method, so a `Dual` load (`BrambleForwardDiffExt`) is split into parts
+        # the same way on every backend.
+        function LinearAlgebra.ldiv!(
+                uₕ::Bramble.VectorElement, fact::$T, b::AbstractVector
+        )
+            return invoke(
+                ldiv!, Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector},
+                uₕ, fact, b)
+        end
+
+        # `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
+        # factorizations against a complex right-hand side, and `$T <: Factorization`, so
+        # that method and the `\` of this extension are equally specific for a complex
+        # vector -- the call would be ambiguous without this one.
+        function Base.:\(
+                fact::$T{S}, b::Vector{Complex{S}}
+        ) where {S <: Union{Float32, Float64}}
+            return complex.(fact \ real(b), fact \ imag(b))
+        end
+    end
+end
 
 function _suitesparse_sym_flag(A::AbstractMatrix, sym)
     if sym === :auto
@@ -130,12 +159,8 @@ function LinearAlgebra.ldiv!(
         x::AbstractVector, fact::ConcreteSuiteSparseFactorization, b::AbstractVector
 )
     n = fact.dim
-    length(b) == n || throw(
-        DimensionMismatch("Right-hand side length $(length(b)) does not match matrix dimension $n"),
-    )
-    length(x) == n || throw(
-        DimensionMismatch("Output vector length $(length(x)) does not match matrix dimension $n"),
-    )
+    Bramble._check_rhs(b, n)
+    Bramble._check_rhs(x, n, "Output vector length")
     _ldiv!(Bramble._mf_data(x), fact.fact, Bramble._mf_data(b))
     return x
 end
@@ -157,25 +182,9 @@ function LinearAlgebra.ldiv!(
         fact::ConcreteSuiteSparseFactorization, b::AbstractVector
 )
     n = fact.dim
-    length(b) == n || throw(
-        DimensionMismatch("Vector length $(length(b)) does not match matrix dimension $n"),
-    )
+    Bramble._check_rhs(b, n, "Vector length")
     _ldiv!(fact.fact, Bramble._mf_data(b))
     return b
-end
-
-# Disambiguates the two equally specific candidates for a `VectorElement` destination:
-# Bramble's generic `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` and the
-# `ldiv!(::AbstractVector, ::ConcreteSuiteSparseFactorization, ::AbstractVector)` above.
-# `VectorElement <: AbstractVector` and `ConcreteSuiteSparseFactorization <: Factorization`,
-# so neither method is more specific and `ldiv!(uₕ, fact, F)` would otherwise be an
-# ambiguity error. Takes Bramble's method, so a `Dual` load (`BrambleForwardDiffExt`) is
-# split into parts the same way on every backend.
-function LinearAlgebra.ldiv!(
-        uₕ::Bramble.VectorElement, fact::ConcreteSuiteSparseFactorization, b::AbstractVector
-)
-    return invoke(ldiv!, Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector},
-        uₕ, fact, b)
 end
 
 # UMFPACK factors only `Float64` and `ComplexF64`: `lu` of a `Float32` matrix widens it, and
@@ -184,16 +193,6 @@ end
 function Base.:\(fact::ConcreteSuiteSparseFactorization{T}, b::AbstractVector) where {T}
     S = float(promote_type(T, eltype(b)))
     return convert(Vector{S}, fact.fact \ Bramble._mf_data(b))
-end
-
-# `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
-# factorizations against a complex right-hand side, and `ConcreteSuiteSparseFactorization <:
-# Factorization`, so that method and the one above are equally specific for a complex vector
-# -- the call would be ambiguous without this one.
-function Base.:\(
-        fact::ConcreteSuiteSparseFactorization{T}, b::Vector{Complex{T}}
-) where {T <: Union{Float32, Float64}}
-    return complex.(fact \ real(b), fact \ imag(b))
 end
 
 # Only an `:auto` factorization that chose CHOLMOD reaches this, and its `FType` holds the
@@ -206,10 +205,7 @@ function _fall_back_to_lu!(fact::ConcreteSuiteSparseFactorization, A::SparseMatr
 end
 
 function Bramble.suitesparse_refactor!(fact::ConcreteSuiteSparseFactorization, A::SparseMatrixCSC)
-    m, n = size(A)
-    (m == fact.dim && n == fact.dim) || throw(
-        DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
-    )
+    Bramble._check_refactor_size(A, fact.dim)
 
     f = fact.fact
     if f isa CHOLMOD.Factor
@@ -240,12 +236,7 @@ function Bramble.suitesparse_refactor!(fact::ConcreteSuiteSparseFactorization, A
 end
 
 function Bramble._suitesparse_solve(A::SparseMatrixCSC, F::AbstractVector; sym = :auto, kwargs...)
-    fact = Bramble._suitesparse_factorize(A; sym = sym, kwargs...)
-    return fact \ F
-end
-
-function LinearAlgebra.factorize(A::SparseMatrixCSC, ::Type{SuiteSparseFactorization}; kwargs...)
-    return Bramble._suitesparse_factorize(A; kwargs...)
+    return Bramble._form_solve(Bramble._suitesparse_factorize, A, F; sym = sym, kwargs...)
 end
 
 function LinearAlgebra.factorize(A::SparseMatrixCSC, ::Type{<:SuiteSparseFactorization}; kwargs...)

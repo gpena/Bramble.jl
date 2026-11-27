@@ -113,14 +113,12 @@ const UnaryWrapper{D} = Union{
 #
 # Two of these override a fallback declared on the *abstract* type rather than filling a
 # gap: `stencil_shift_trait(::LazyOp)` answers translation-invariant and
-# `_all_trial_interpolated(::LazyOp)` answers false, so a wrapper reaching either default
+# `_all_interpolated(side, ::LazyOp)` answers false, so a wrapper reaching either default
 # is a wrong answer, not a missing one. That is the shape of mistake this collapse is meant
 # to make impossible: there is now one method to get right per query, not fourteen.
 stencil_shift_trait(op::UnaryWrapper) = stencil_shift_trait(op.inner_op)
-_all_trial_interpolated(op::UnaryWrapper) = _all_trial_interpolated(op.inner_op)
-_all_test_interpolated(op::UnaryWrapper) = _all_test_interpolated(op.inner_op)
-_has_test_interp(op::UnaryWrapper) = _has_test_interp(op.inner_op)
-_has_trial_interp(op::UnaryWrapper) = _has_trial_interp(op.inner_op)
+_all_interpolated(side::_InterpSide, op::UnaryWrapper) = _all_interpolated(side, op.inner_op)
+_has_interp(side::_InterpSide, op::UnaryWrapper) = _has_interp(side, op.inner_op)
 _is_dirac(op::UnaryWrapper) = _is_dirac(op.inner_op)
 
 """
@@ -505,7 +503,7 @@ function _unmark(op::OperatorAdd{D}) where {D}
 end
 function _unmark(op::BilinearProduct{D, W}) where {D, W}
     left, right = _interior_term(op.left_op), _interior_term(op.right_op)
-    return BilinearProduct{D, W, typeof(left), typeof(right)}(op.inner, left, right)
+    return BilinearProduct{D, W}(op.inner, left, right)
 end
 
 """
@@ -544,7 +542,7 @@ function _mark(op::OperatorAdd{D}, facets) where {D}
 end
 function _mark(op::BilinearProduct{D, W}, facets) where {D, W}
     left = _mark(op.left_op, facets)
-    return BilinearProduct{D, W, typeof(left), typeof(op.right_op)}(op.inner, left, op.right_op)
+    return BilinearProduct{D, W}(op.inner, left, op.right_op)
 end
 _mark(op::UnaryWrapper, facets) = _rewrap_inner(op, _mark(op.inner_op, facets))
 function _mark(op::_FirstDifference{D, Dim}, facets) where {D, Dim}
@@ -656,7 +654,7 @@ end
 end
 
 # The facet products, whose operands are meant to read ghosts at the node.
-@inline _facet_inner(::Union{InnerGamma, InnerGammaNormal, InnerGammaFacet}) = true
+@inline _facet_inner(::AbstractInnerGamma) = true
 @inline _facet_inner(::Any) = false
 
 @noinline function _check_absent_reads(
@@ -1182,7 +1180,8 @@ function _bind_interp_spaces(op::OperatorScale{D}, trial_leaf, test_leaf) where 
 end
 
 # A coefficient in device storage is read one point at a time by `local_stencil`, which the
-# device refuses, so binding swaps it for a host copy (`_host_array`, `linear.jl`;
+# device refuses, so binding swaps it for a host copy (`_host_array`, `utils/device_kernels.jl`
+# and, for a `VectorElement`, `assembly/linear.jl`;
 # gpena/Bramble.jl#364). Every walk of every fill binds its term afresh (the same sites take
 # the walked leaf's `host_weights`), so the copy is new each time and `assemble!` sees a
 # coefficient changed on the device since the last call; it is never cached in the form, and
@@ -1210,16 +1209,17 @@ resolve_ast(op::Any) = op
 # One method for every node that wraps a single operand, instead of one registration per
 # node type (gpena/Bramble.jl#52); see [`UnaryWrapper`](@ref).
 is_symbolic(op::UnaryWrapper) = is_symbolic(op.inner_op)
-is_symbolic(::TrialFunction) = true
-is_symbolic(::TestFunction) = true
-is_symbolic(::IndexedTrialFunction) = true
-is_symbolic(::IndexedTestFunction) = true
-is_symbolic(::SourceFunction) = true
-is_symbolic(::SourceVector) = true
-is_symbolic(::SourceConstant) = true
-is_symbolic(::DiracSource) = true
-is_symbolic(op::BilinearProduct) = true
-is_symbolic(op::LinearProduct) = true
+
+# The nodes `is_symbolic` answers `true` for outright: the four function leaves, the four
+# sources and the two products. Everything else is the `LazyOp` fallback (`false`), a
+# wrapper (its operand) or a sum (either side).
+const _SymbolicNode = Union{
+    TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFunction,
+    SourceFunction, SourceVector, SourceConstant, DiracSource,
+    BilinearProduct, LinearProduct
+}
+
+is_symbolic(::_SymbolicNode) = true
 
 # A wrapper is source-only when what it wraps is. One method instead of one registration
 # per node type (gpena/Bramble.jl#52); `InterpolationNode` overrides it below, since it
@@ -1232,8 +1232,8 @@ Whether a `LazyOp` subtree is source-only: built entirely from sources
 operators that wrap them, never bottoming out in a `TrialFunction`/`IndexedTrialFunction`
 leaf.
 
-`innerₕ`'s `l::Function`/`l::Number`/`l::VectorElement` overloads (`operators/inner.jl`)
-never need this: those three types are never anything but a source, so wrapping them in a
+`innerₕ`'s `l::Union{Function, Number, VectorElement}` overload (`operators/inner.jl`)
+never needs this: those three types are never anything but a source, so wrapping them in a
 `LinearProduct` is unconditional. The question only exists for an argument that already
 arrived as a `LazyOp`: `πₕ(uₕ)` ([`interpolate_at`](@ref)) or `D₋ₓ(πₕ(uₕ))` are
 sources too, just already wrapped, and the generic `innerₕ(::LazyOp, ::LazyOp)` used to build
@@ -1246,10 +1246,6 @@ since that is exactly the behavior every node had before this predicate existed 
 `BilinearProduct`) for anything not explicitly listed as source-only.
 """
 _is_source_only(op::UnaryWrapper) = _is_source_only(op.inner_op)
-_is_source_only(::TrialFunction) = false
-_is_source_only(::TestFunction) = false
-_is_source_only(::IndexedTrialFunction) = false
-_is_source_only(::IndexedTestFunction) = false
 _is_source_only(::SourceFunction) = true
 _is_source_only(::SourceVector) = true
 _is_source_only(::SourceConstant) = true
@@ -1259,10 +1255,8 @@ function _is_source_only(op::OperatorAdd)
     return _is_source_only(op.left_op) && _is_source_only(op.right_op)
 end
 
-# A product (whichever kind) is its own thing, not a bare source to route again.
-_is_source_only(::BilinearProduct) = false
-_is_source_only(::LinearProduct) = false
-
+# Function leaves and products (a product is its own thing, not a bare source to route
+# again) fall through to here.
 _is_source_only(::LazyOp) = false
 
 # The value of a source-only subtree at a grid point: `_contracted_left_stencil`

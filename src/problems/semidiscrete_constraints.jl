@@ -56,6 +56,15 @@ struct TimeParamDependentConstraints{C}
     constraints::C
 end
 
+# The three carriers that hold values, and the conditions each yields at `(t, p)`. They stay
+# three types so the method is picked by type, with no flag read per call.
+const _ValueConstraints = Union{
+    StaticConstraints, TimeDependentConstraints, TimeParamDependentConstraints}
+
+@inline _constraints_at(c::StaticConstraints, t, p) = c.constraints
+@inline _constraints_at(c::TimeDependentConstraints, t, p) = c.constraints(t)
+@inline _constraints_at(c::TimeParamDependentConstraints, t, p) = c.constraints(t, p)
+
 # Time/parameter dependence is read off the conditions' arity through `_accepts`
 # (geometry/marker.jl), which sees through a `Fix` or a composition to the function it
 # wraps. A condition of `x` alone is spatial and passes unchanged through `_fix_time` and
@@ -174,17 +183,13 @@ function _apply_initial_constraints!(
     return u
 end
 
-@inline _apply_initial_constraints!(
-    u::AbstractVector, sd, c::StaticConstraints, p, t
-) = dirichlet_bc!(u, sd.space, c.constraints, sd.labels...; components = sd.components)
-
-@inline _apply_initial_constraints!(
-    u::AbstractVector, sd, c::TimeDependentConstraints, p, t
-) = dirichlet_bc!(u, sd.space, c.constraints(t), sd.labels...; components = sd.components)
-
-@inline _apply_initial_constraints!(
-    u::AbstractVector, sd, c::TimeParamDependentConstraints, p, t
-) = dirichlet_bc!(u, sd.space, c.constraints(t, p), sd.labels...; components = sd.components)
+@inline function _apply_initial_constraints!(
+        u::AbstractVector, sd, c::_ValueConstraints, p, t
+)
+    return dirichlet_bc!(
+        u, sd.space, _constraints_at(c, t, p), sd.labels...; components = sd.components
+    )
+end
 
 # --- Constraint descriptions --------------------------------------------------------- #
 #
@@ -202,7 +207,6 @@ function _constraints_description(sd)
     )
 end
 
-@inline _constraint_description(::NoConstraints) = "none"
 @inline _constraint_description(::LabelsOnly) = "zero"
 @inline _constraint_description(::StaticConstraints) = "g(x)"
 @inline _constraint_description(::TimeDependentConstraints) = "g(x, t)"

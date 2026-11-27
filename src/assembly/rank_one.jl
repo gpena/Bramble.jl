@@ -449,10 +449,15 @@ function mul!(
     return _rank_one_mul!(Y, K.A, identity, K.σ, K.wt, K.ws, X, α, β)
 end
 
-# `α = 0`: `x` is not read, so an `Inf` in it gives no `NaN`, and with `β = 0` neither is
-# `y`, as a matrix's own `mul!` behaves.
+# `y = β y` and nothing else: `x` is not read when `α = 0`, so an `Inf` in it gives no
+# `NaN`, and with `β = 0` neither is `y` (a `NaN` in it does not survive), as a matrix's own
+# `mul!` behaves. `β = 1` leaves `y` as it is.
 function _scale_only!(y::AbstractArray, β::Number)
-    iszero(β) ? fill!(y, zero(eltype(y))) : (y .*= β)
+    if iszero(β)
+        fill!(y, zero(eltype(y)))
+    elseif !isone(β)
+        y .*= β
+    end
     return y
 end
 

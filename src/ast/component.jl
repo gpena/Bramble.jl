@@ -77,46 +77,10 @@ end
 
 # --- the operators, rebuilt around an indexed argument ----------------------------- #
 
-# Every stencil node but `ShiftNode`, whose `shift_amount` field the method below keeps.
-for T in (
-    :BackwardDifference,
-    :ForwardDifference,
-    :CenteredDifference,
-    :StarDifference,
-    :CrossWeightedDifference,
-    :SecondDifference,
-    :JumpNode,
-    :BackwardAverage,
-    :ForwardAverage,
-    :CenteredAverage
-)
-    @eval @inline function component(op::$T{D, Dim}, i::Int) where {D, Dim}
-        inner = component(op.inner_op, i)
-        return $T{D, Dim, typeof(inner)}(inner)
-    end
-end
-
-@inline function component(op::ShiftNode{D, Dim}, i::Int) where {D, Dim}
-    inner = component(op.inner_op, i)
-    return ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
-end
-
-@inline function component(op::RegionRestriction{D, R}, i::Int) where {D, R}
-    inner = component(op.inner_op, i)
-    return RegionRestriction{D, R, typeof(inner)}(op.region, inner)
-end
-
-# Scaling passes through untouched: the scalar or grid function multiplying an operator is
-# not what the index names.
-@inline function component(op::OperatorScale{D, S}, i::Int) where {D, S}
-    inner = component(op.inner_op, i)
-    return OperatorScale{D, S, typeof(inner)}(op.scalar, inner)
-end
-
-@inline function component(op::GridFunctionScale{D, V}, i::Int) where {D, V}
-    inner = component(op.inner_op, i)
-    return GridFunctionScale{D, V, typeof(inner)}(op.grid_function, inner)
-end
+# Every wrapper (stencil nodes, scales, restrictions, interpolation) is rebuilt around its
+# indexed operand, other fields kept: a scale's scalar or grid function is not what the
+# index names. By value, as `v(1)(2)` re-indexes a leaf without changing its type.
+@inline component(op::UnaryWrapper, i::Int) = _rewrap_value(op, component(op.inner_op, i))
 
 @inline function component(op::OperatorAdd{D}, i::Int) where {D}
     l = component(op.left_op, i)

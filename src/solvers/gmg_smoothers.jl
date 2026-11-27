@@ -43,6 +43,7 @@ abstract type AbstractSmoother{T} end
 
 Base.eltype(::Type{<:AbstractSmoother{T}}) where {T} = T
 Base.size(s::AbstractSmoother) = size(s.op)
+Base.size(s::AbstractSmoother, d::Integer) = d <= 2 ? size(s)[d] : 1
 
 """
     JacobiSmoother{T, Op, V <: AbstractVector{T}} <: AbstractSmoother{T}
@@ -304,14 +305,7 @@ function chebyshev_smoother(
         op::_AnyMatrixFreeOperator{T}; degree::Integer = 2, λmax = nothing
 ) where {T}
     degree >= 1 || throw(ArgumentError("chebyshev_smoother needs degree >= 1, got $degree"))
-    J = jacobi_preconditioner(op)
-    λ = λmax === nothing ? max_eigenvalue_estimate(op; preconditioner = J) : T(λmax)
-    (isfinite(λ) && λ > 0) || throw(ArgumentError(
-        λmax === nothing ?
-        "chebyshev_smoother: the λmax estimate $λ is not finite and positive: " *
-        "the form's diagonal has a zero or the form is not SPD" :
-        "chebyshev_smoother needs a finite λmax > 0, got $λ"
-    ))
+    J, λ = _chebyshev_lambda_max(op, λmax, "chebyshev_smoother")
     d = J.inv_diagonal
     return ChebyshevSmoother{T, typeof(op), typeof(d)}(
         op, d, λ / 4, λ, Int(degree), similar(d), similar(d)
@@ -573,18 +567,11 @@ end
 # The raw storage of `x` and `b`, once their lengths, indexing and aliasing are checked.
 @inline function _smoother_data(s::AbstractSmoother, x, b)
     n = length(s.r)
-    (length(x) == n && length(b) == n) || _throw_smoother_dimmismatch(s, x, b)
+    (length(x) == n && length(b) == n) || _throw_dimmismatch(
+        s, x, b, "cannot smooth an iterate of length", "against a right-hand side of length"
+    )
     xd, bd = _mf_data(x), _mf_data(b)
     Base.require_one_based_indexing(xd, bd)
     Base.mightalias(xd, bd) && throw(ArgumentError("smooth!: x and b must not alias"))
     return xd, bd
-end
-
-@noinline function _throw_smoother_dimmismatch(s, x, b)
-    throw(
-        DimensionMismatch(
-        "$(nameof(typeof(s))) of size $(size(s)) cannot smooth an iterate of length " *
-        "$(length(x)) against a right-hand side of length $(length(b))",
-    ),
-    )
 end

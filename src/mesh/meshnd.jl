@@ -240,7 +240,7 @@ function _mesh(
     npts_with_collapsed = ntuple(i -> _storage_collapsed(_set(i)..., backend) ? 1 : npts[i],
         Val(D))
 
-    idxs = generate_indices(npts_with_collapsed)
+    idxs = CartesianIndices(npts_with_collapsed)
 
     _submeshes = submeshes(Ω, npts_with_collapsed, unif, backend)
     idxs, fitted = _close_grid!(_submeshes, regions(markers(Ω)), idxs)
@@ -278,20 +278,18 @@ end
 function _close_grid!(subs::NTuple{2, Mesh1D}, regs::Tuple{Any, Vararg}, idxs)
     ids = map(identifier, regs)
     nls = count(P -> P isa LevelSet, ids)
-    nls == 0 && return _close_polygon_grid!(subs, ids, regs, idxs)
+    if nls == 0
+        xs, ys = _grid_closure(ids, host_points(subs[1]), host_points(subs[2]))
+        _set_points!(subs[1], xs)
+        _set_points!(subs[2], ys)
+        return CartesianIndices((length(xs), length(ys))), map(_ -> nothing, regs)
+    end
     (nls == 1 && length(ids) == 1) || _throw_levelset_markers(nls, length(ids) - nls)
     xs, ys = host_points(subs[1]), host_points(subs[2])
     X, Y, P = _levelset_grid(only(ids).φ, xs, ys)
     _set_points!(subs[1], X)
     _set_points!(subs[2], Y)
-    return generate_indices((length(X), length(Y))), (P,)
-end
-
-function _close_polygon_grid!(subs, ids, regs, idxs)
-    xs, ys = _grid_closure(ids, host_points(subs[1]), host_points(subs[2]))
-    _set_points!(subs[1], xs)
-    _set_points!(subs[2], ys)
-    return generate_indices((length(xs), length(ys))), map(_ -> nothing, regs)
+    return CartesianIndices((length(X), length(Y))), (P,)
 end
 
 @noinline function _throw_levelset_markers(nls, npoly)
@@ -333,7 +331,7 @@ when the orbits of its crossing map are finite; otherwise the cap is reached.
     closure exceeds a number of lines proportional to the input (the grid
     closure of a polygon or level set is unbounded or too fine for this grid).
 """
-_grid_closure(P::Union{Polygon, LevelSet}, xs, ys) = _grid_closure((P,), xs, ys)
+_grid_closure(P::_RegionIdentifier, xs, ys) = _grid_closure((P,), xs, ys)
 
 function _grid_closure(Ps::Tuple, xs::AbstractVector, ys::AbstractVector)
     T = float(promote_type(eltype(xs), eltype(ys)))
@@ -347,7 +345,7 @@ function _grid_closure(Ps::Tuple, xs::AbstractVector, ys::AbstractVector)
     L = if isempty(V)
         max(sx[end] - sx[1], sy[end] - sy[1])
     else
-        max(maximum(first, V) - minimum(first, V), maximum(last, V) - minimum(last, V))
+        _polygon_extent(V)
     end
     ε = T(max(eps(T), maximum(P -> eps(eltype(eltype(P.vertices))), polys; init = zero(T))))
     tol = max(T(1e-10), 64 * ε) * L
@@ -590,7 +588,6 @@ Return the per-axis backward spacings as an `NTuple{D}` of vectors, where
 See also: [`half_spacings`](@ref), [`cell_measures`](@ref).
 """
 @generate_mesh_ntuple_func spacings
-@generate_mesh_ntuple_func forward_spacings
 
 @generate_mesh_ntuple_func_with_idx point
 @generate_mesh_ntuple_func_with_idx half_point
@@ -683,7 +680,7 @@ function _refine_indices!(Ωₕ::MeshnD{D}) where {D}
     # still spans the old one, so everything that iterates indices(Ωₕ), which is every
     # restriction and every operator, writes only the old index set and leaves the rest
     # of a grid function holding whatever was in the fresh allocation.
-    set_indices!(Ωₕ, generate_indices(npoints(Ωₕ, Tuple)))
+    set_indices!(Ωₕ, CartesianIndices(npoints(Ωₕ, Tuple)))
     return nothing
 end
 
@@ -759,32 +756,28 @@ function Base.show(
         io::IO, ::MIME"text/plain", Ωₕ::MeshnD{D, BT, CI, SM, T}
 ) where {D, BT, CI, SM, T}
     return show_block(io) do io
-        return _show_meshnd_detailed(io, Ωₕ)
+        pp = PrettyPrinter(io)
+
+        npts_tuple = npoints(Ωₕ, Tuple)
+        n_total = npoints(Ωₕ)
+        topodim = topo_dim(Ωₕ)
+
+        # Check if all dimensions are collapsed (topological dimension is 0)
+        collapsed = (topodim == 0)
+
+        print_mesh_header(pp, "MeshnD", D, T)
+        println(io)
+
+        print_mesh_summary(pp, npts_tuple, topodim, collapsed)
+
+        print_mesh_domain_info(pp, set(Ωₕ))
+
+        if !collapsed
+            uniform_tuple = ntuple(i -> is_uniform(Ωₕ(i)), Val(D))
+            print_mesh_spacing_info(pp, uniform_tuple, hₘₐₓ(Ωₕ))
+        end
+
+        print_mesh_markers(pp, markers(Ωₕ))
+        return nothing
     end
-end
-
-function _show_meshnd_detailed(io::IO, Ωₕ::MeshnD{D, BT, CI, SM, T}) where {D, BT, CI, SM, T}
-    pp = PrettyPrinter(io)
-
-    npts_tuple = npoints(Ωₕ, Tuple)
-    n_total = npoints(Ωₕ)
-    topodim = topo_dim(Ωₕ)
-
-    # Check if all dimensions are collapsed (topological dimension is 0)
-    collapsed = (topodim == 0)
-
-    print_mesh_header(pp, "MeshnD", D, T, npts_tuple)
-    println(io)
-
-    print_mesh_summary(pp, npts_tuple, topodim, collapsed)
-
-    print_mesh_domain_info(pp, set(Ωₕ))
-
-    if !collapsed
-        uniform_tuple = ntuple(i -> is_uniform(Ωₕ(i)), Val(D))
-        print_mesh_spacing_info(pp, uniform_tuple, hₘₐₓ(Ωₕ))
-    end
-
-    print_mesh_markers(pp, markers(Ωₕ))
-    return nothing
 end

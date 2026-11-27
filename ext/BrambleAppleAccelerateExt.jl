@@ -54,8 +54,37 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         failure::Union{Nothing, Exception}
     end
 
-    Base.size(fact::ConcreteAccelerateFactorization) = (fact.dim, fact.dim)
-    Base.size(fact::ConcreteAccelerateFactorization, d::Integer) = d <= 2 ? fact.dim : 1
+    for T in (:ConcreteAccelerateFactorization,)
+        @eval begin
+            Base.size(fact::$T) = (fact.dim, fact.dim)
+            Base.size(fact::$T, d::Integer) = d <= 2 ? fact.dim : 1
+
+            # Disambiguates the two equally specific candidates for a `VectorElement` destination:
+            # Bramble's generic `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` and
+            # the `ldiv!(::AbstractVector, ::$T, ::AbstractVector)` of this extension.
+            # `VectorElement <: AbstractVector` and `$T <: Factorization`, so neither is more
+            # specific and `ldiv!(uₕ, fact, F)` would otherwise be an ambiguity error. Takes
+            # Bramble's method, so a `Dual` load (`BrambleForwardDiffExt`) is split into parts
+            # the same way on every backend.
+            function LinearAlgebra.ldiv!(
+                    uₕ::Bramble.VectorElement, fact::$T, b::AbstractVector
+            )
+                return invoke(
+                    ldiv!, Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector},
+                    uₕ, fact, b)
+            end
+
+            # `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
+            # factorizations against a complex right-hand side, and `$T <: Factorization`, so
+            # that method and the `\` of this extension are equally specific for a complex
+            # vector -- the call would be ambiguous without this one.
+            function Base.:\(
+                    fact::$T{S}, b::Vector{Complex{S}}
+            ) where {S <: Union{Float32, Float64}}
+                return complex.(fact \ real(b), fact \ imag(b))
+            end
+        end
+    end
 
     # `nothing` spells `:auto` too, for `sym` and for `kind`.
     _aa_auto(sym, kind) = (sym === :auto || sym === nothing) && (kind === :auto || kind === nothing)
@@ -440,12 +469,8 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
             x::AbstractVector, fact::ConcreteAccelerateFactorization, b::AbstractVector
     )
         n = fact.dim
-        length(b) == n || throw(
-            DimensionMismatch("Right-hand side length $(length(b)) does not match matrix dimension $n"),
-        )
-        length(x) == n || throw(
-            DimensionMismatch("Output vector length $(length(x)) does not match matrix dimension $n"),
-        )
+        Bramble._check_rhs(b, n)
+        Bramble._check_rhs(x, n, "Output vector length")
         _aa_assert_usable(fact)
         _aa_solve!(x, fact.aa_fact, b)
         return x
@@ -455,9 +480,7 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
             fact::ConcreteAccelerateFactorization, b::AbstractVector
     )
         n = fact.dim
-        length(b) == n || throw(
-            DimensionMismatch("Vector length $(length(b)) does not match matrix dimension $n"),
-        )
+        Bramble._check_rhs(b, n, "Vector length")
         _aa_assert_usable(fact)
         _aa_solve!(fact.aa_fact, b)
         return b
@@ -493,41 +516,14 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
         return X
     end
 
-    # Disambiguates the two equally specific candidates for a `VectorElement` destination:
-    # Bramble's generic `ldiv!(::VectorElement, ::Factorization, ::AbstractVector)` and the
-    # `ldiv!(::AbstractVector, ::ConcreteAccelerateFactorization, ::AbstractVector)` above.
-    # `VectorElement <: AbstractVector` and `ConcreteAccelerateFactorization <:
-    # Factorization`, so neither method is more specific and `ldiv!(uₕ, fact, F)` would
-    # otherwise be an ambiguity error. Takes Bramble's method, so a `Dual` load
-    # (`BrambleForwardDiffExt`) is split into parts the same way on every backend.
-    function LinearAlgebra.ldiv!(
-            uₕ::Bramble.VectorElement, fact::ConcreteAccelerateFactorization, b::AbstractVector
-    )
-        return invoke(ldiv!, Tuple{Bramble.VectorElement, LinearAlgebra.Factorization, AbstractVector},
-            uₕ, fact, b)
-    end
-
     function Base.:\(fact::ConcreteAccelerateFactorization, b::AbstractVector)
         _aa_assert_usable(fact)
         T = promote_type(eltype(fact), eltype(b))
         return _aa_solve!(fact.aa_fact, copyto!(similar(b, T, size(b)), b))
     end
 
-    # `LinearAlgebra` defines `\(::Factorization{T}, ::Vector{Complex{T}})` for real
-    # factorizations against a complex right-hand side, and `ConcreteAccelerateFactorization
-    # <: Factorization`, so that method and the one above are equally specific for a complex
-    # vector -- the call would be ambiguous without this one.
-    function Base.:\(
-            fact::ConcreteAccelerateFactorization{T}, b::Vector{Complex{T}}
-    ) where {T <: Union{Float32, Float64}}
-        return complex.(fact \ real(b), fact \ imag(b))
-    end
-
     function Bramble.accelerate_refactor!(fact::ConcreteAccelerateFactorization, A::SparseMatrixCSC)
-        m, n = size(A)
-        (m == fact.dim && n == fact.dim) || throw(
-            DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $(fact.dim)"),
-        )
+        Bramble._check_refactor_size(A, fact.dim)
         # A Cholesky or LDLᵀ factorization, `:auto` or explicit, takes a Hermitian matrix
         # only: AppleAccelerate stores a non-Hermitian one in full, against the factored
         # triangle, and it needs LU, a new symbolic factorization. Refused before the
@@ -575,21 +571,16 @@ using SparseArrays: SparseArrays, SparseMatrixCSC
     end
 else
     function Bramble._accelerate_factorize(::SparseMatrixCSC; kwargs...)
-        throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
+        Bramble._require_macos()
     end
 
     function Bramble.accelerate_refactor!(::AccelerateFactorization, ::SparseMatrixCSC)
-        throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
+        Bramble._require_macos()
     end
 end
 
 function Bramble._accelerate_solve(A::SparseMatrixCSC, F::AbstractVector; sym = :auto, kind = :auto)
-    fact = Bramble._accelerate_factorize(A; sym = sym, kind = kind)
-    return fact \ F
-end
-
-function LinearAlgebra.factorize(A::SparseMatrixCSC, ::Type{AccelerateFactorization}; kwargs...)
-    return Bramble._accelerate_factorize(A; kwargs...)
+    return Bramble._form_solve(Bramble._accelerate_factorize, A, F; sym = sym, kind = kind)
 end
 
 function LinearAlgebra.factorize(A::SparseMatrixCSC, ::Type{<:AccelerateFactorization}; kwargs...)

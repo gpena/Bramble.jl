@@ -61,8 +61,6 @@ function _pc_space_session(Ωₕ, f, g, marker::Symbol)
     avgₕ(Vₕ, (f, g))
     wₕ(1)
     reshape(wₕ)
-    space_type(uₕ)
-    space_type(wₕ)
 
     # Element constructors, including the scalar fills, which take a separate
     # path from the copy of an existing coefficient vector.

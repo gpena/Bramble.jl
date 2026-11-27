@@ -16,8 +16,8 @@ always answers a valid position).
 
 The seam a new backend's matrix type implements to plug into assembly
 (gpena/Bramble.jl#12): `DiagonalReplaySink`, the positions search of the
-coordinate walk (`_coordinates_to_positions!`) and [`add_to_sparse!`](@ref) reduce to this and [`_scatter_add!`](@ref) once the raw `nzval`/
-linear-index field access each used to do directly is factored out here. `ReplaySink` and
+coordinate walk (`_coordinates_to_positions!`) reduce to this and [`_scatter_add!`](@ref) once
+the raw `nzval`/linear-index field access each used to do directly is factored out here. `ReplaySink` and
 its kin replay those positions into `_scatter_storage(A)`, the array `_scatter_add!` writes.
 
 The `SparseMatrixCSC` method is exactly the position search this file always ran: a linear
@@ -329,39 +329,6 @@ end
 # seam needs.
 @inline _coerce_serial_to_threaded(::GpuPolicy) = CpuThreaded()
 
-"""
-    add_to_sparse!(A::AbstractMatrix, row::Int, col::Int, val::Number, term) -> Nothing
-
-Add `val` to `A[row, col]`, which the preallocated sparsity pattern is required to contain.
-
-# Throws
-- `ArgumentError`: `(row, col)` is not a stored entry of `A`.
-
-This used to return quietly on a missing entry, which let a matrix whose pattern cannot hold
-the form assemble to a plausible wrong answer instead of failing. That is how a term naming
-both components of a composite space once vanished without a word: the pattern held the
-diagonal blocks only, so every off-diagonal contribution was discarded. The regression test
-for that is `test/form/bilinear.jl`, "Composite blocks".
-
-`term` is carried only to name the offending node in the message, and read only on the
-branch that throws.
-
-Dispatches through [`_scatter_position`](@ref)/[`_scatter_add!`](@ref) on `A`'s own
-locality: a host matrix searches/writes `A` directly, a device one searches/writes
-`A.mirror` (gpena/Bramble.jl#313) -- either way this function itself carries no
-device-specific branch or parameter.
-
-See also: [`allocate_system_matrix`](@ref), whose positions search raises the same way on
-the serial path.
-"""
-@inline function add_to_sparse!(
-        A::AbstractMatrix, row::Int, col::Int, val::Number, term)
-    pos = _scatter_position(A, row, col)
-    pos == 0 && _throw_missing_pattern_entry(term)
-    _scatter_add!(A, pos, val)
-    return nothing
-end
-
 # Whether an earlier entry already named the same pair of offsets. `entries` is anything
 # whose `k`-th element starts with `(off_u, off_v)`. The callers are the two pattern
 # builders in jacobian_pattern.jl, which pass the raw stencil and never read a weight;
@@ -383,8 +350,6 @@ An ordinary offset is bounds-checked against the grid and answers `0` on a bound
 entry is dropped. An interpolation entry carries an [`AbsoluteColumn`](@ref) instead, naming
 a source column outright, because the trial degrees of freedom it reaches live on a
 different mesh and which ones depends on where the point falls.
-
-See also: [`_entry_target`](@ref).
 """
 Base.@propagate_inbounds function _trial_column(lin_indices, I::CartesianIndex, off_u)
     Iu = I + CartesianIndex(off_u)
@@ -509,42 +474,13 @@ See also: [`visit_bilinear_stencil`](@ref), [`_sink_entry!`](@ref).
 @inline _sink_point!(::Any, ::Int, ::CartesianIndex) = 0
 
 """
-    _entry_target(lin_indices, I::CartesianIndex, off_u, off_v,
-                  row_offset::Int, col_offset::Int) -> Tuple{Int,Int}
-
-The matrix position a stencil entry writes to, or `(0, 0)` when it writes nowhere.
-
-The row comes from the test offset `off_v` and is dropped when it leaves the grid. The
-column comes from [`_trial_column`](@ref), which answers `0` for a trial offset outside the
-grid and reads an [`AbsoluteColumn`](@ref) directly, since an interpolation entry names its
-source column rather than an offset from `I`. Both are then shifted into the block by
-`row_offset` and `col_offset`.
-
-`(0, 0)` is a sentinel rather than `nothing` so the return type stays concrete. This is
-the reference form the tests pin; it is not on the hot path, where `_step_entry!` fuses it.
-
-# Returns
-- `Tuple{Int,Int}`: The `(row, col)` to write, or `(0, 0)` to skip the entry.
-"""
-Base.@propagate_inbounds function _entry_target(
-        lin_indices, I::CartesianIndex, off_u, off_v, row_offset::Int, col_offset::Int
-)
-    row = _test_row(lin_indices, I, off_v)
-    row == 0 && return (0, 0)
-    col = _trial_column(lin_indices, I, off_u)
-    col == 0 && return (0, 0)
-    return (row + row_offset, col + col_offset)
-end
-
-"""
     _step_entry!(sink, lin_indices, I, off_u, off_v, weight, row_offset::Int, col_offset::Int, slot::Int) -> Bool
 
 One entry: guard it, and hand it to the sink if it lands inside. Answers whether it did, so
 the caller can advance the slot.
 
-Fused rather than "compute the target, then act on it" ([`_entry_target`](@ref), which the
-tests use) because returning a `(row, col)` sentinel tuple has to
-be merged from three return points: measured against the hand-written loop it cost 5 extra
+Fused rather than "compute the target, then act on it" because returning a `(row, col)`
+sentinel tuple has to be merged from three return points: measured against the hand-written loop it cost 5 extra
 phi nodes, 4 integer adds and 3 comparisons per entry, with identical loads, stores and calls.
 """
 Base.@propagate_inbounds function _step_entry!(
@@ -1054,14 +990,13 @@ end
 
 """
     visit_bilinear_stencil(sink, term, sp, row_offset::Int, col_offset::Int) -> sink
-    visit_bilinear_stencil(interior_sink, boundary_sink, term, sp, row_offset::Int, col_offset::Int) -> boundary_sink
 
 Walk every grid point of `sp`, evaluate `term`'s local stencil there, and hand each entry
 that lands inside the matrix to a sink.
 
 The walk that five separate sweeps used to re-derive: mesh, markers, linear indices, the
 loop over grid points, the stencil evaluation, and the decision of where each entry lands
-([`_step_entry!`](@ref), which fuses [`_entry_target`](@ref)). A sink supplies only what to do with an entry, so the pattern
+([`_step_entry!`](@ref)). A sink supplies only what to do with an entry, so the pattern
 passes and the value passes share one traversal instead of agreeing by coincidence.
 
 The fifth argument handed to `local_stencil` is the *leaf's* linear index. A term routed to
@@ -1083,12 +1018,8 @@ For the recording and replay sinks a product term is walked factor by factor, ne
 into its product stencil (`_factored_walk`): the same entries, in the same order and to
 the bit, handed to the sink as they are formed.
 
-The two-sink form lets the interior and the boundary shell be handled by different sinks --
-only [`DiagonalReplaySink`](@ref) needs this, pairing itself (interior) with an ordinary
-[`ReplaySink`](@ref) (boundary shell), so the one-sink form below is the thin, common case.
-
 # Arguments
-- `sink` (or `interior_sink`/`boundary_sink`): What to do per entry. The sinks are
+- `sink`: What to do per entry. The sinks are
   `_CoordSink` (pattern and positions), [`ReplaySink`](@ref), `_PairReplaySink` and
   [`DiagonalReplaySink`](@ref) (values); the
   contract is in [`_sink_entry!`](@ref) and [`_sink_point!`](@ref).
@@ -1098,16 +1029,10 @@ only [`DiagonalReplaySink`](@ref) needs this, pairing itself (interior) with an 
   space.
 
 # Returns
-- The boundary-shell sink (`sink` itself, in the one-sink form), so a caller can read what
-  it collected.
+- `sink` itself, so a caller can read what it collected.
 
-See also: [`allocate_system_matrix`](@ref), [`add_to_sparse!`](@ref).
+See also: [`allocate_system_matrix`](@ref), [`_scatter_position`](@ref).
 """
-@inline visit_bilinear_stencil(
-    interior_sink, boundary_sink, term, sp, row_offset::Int, col_offset::Int) = _visit_stencil!(
-    interior_sink, boundary_sink, term, sp, row_offset, col_offset)
-
-# The ordinary one-sink call: the same sink plays both roles.
 @inline visit_bilinear_stencil(sink, term, sp, row_offset::Int, col_offset::Int) = _visit_stencil!(
     sink, sink, term, sp, row_offset, col_offset)
 
@@ -1148,9 +1073,9 @@ Base.@nospecializeinfer Base.@assume_effects :foldable function _reads_component
     return false
 end
 
-# The walk itself, which the replay calls directly: one method instance per (sink, term)
-# where the two `visit_bilinear_stencil` methods above, the one calling the other, compiled
-# two.
+# The walk itself, which the replay calls directly, with one sink for the interior core and
+# one for the boundary shell: one method instance per (sink, term) where
+# `visit_bilinear_stencil` above, calling it, compiled two.
 @inline function _visit_stencil!(
         interior_sink::SINK1,
         boundary_sink::SINK2,
@@ -1469,7 +1394,7 @@ counts accepted entries from this point's base ([`_sink_point!`](@ref)) and matt
 function _sink_entry! end
 
 # Raised by the positions search that builds the replay cache
-# (`_coordinates_to_positions!`) and by `add_to_sparse!`: a pattern that
+# (`_coordinates_to_positions!`): a pattern that
 # cannot hold the form is reported rather than skipped. `@nospecialize`: an error path, not
 # worth one compiled copy per term type.
 @noinline function _throw_missing_pattern_entry(@nospecialize(term))
@@ -1650,7 +1575,7 @@ Add a term's values to `A`'s interior core using [`Segment`](@ref)'s per-tap str
 instead of a stored position per entry.
 
 Paired with an ordinary [`ReplaySink`](@ref) for the boundary shell through the two-sink
-form of [`visit_bilinear_stencil`](@ref): this sink is only ever handed the interior region,
+walk `_visit_stencil!`: this sink is only ever handed the interior region,
 so `_sink_point!` addresses a point by its rank `n` in `interior`'s own iteration order
 (zero-based, via an incrementing counter on the sink itself) rather than by `lin_idx`, matching the order
 `_try_diagonal_segment` validated the stride against. The `k`-th tap of that point

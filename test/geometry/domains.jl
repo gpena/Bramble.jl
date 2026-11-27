@@ -4,7 +4,6 @@ using Test
 using Bramble
 using Bramble:
                Marker,
-               MarkerPair,
                Domain,
                DomainMarkers,
                EvaluatedDomainMarkers,
@@ -14,13 +13,10 @@ using Bramble:
                labels,
                CartesianProduct
 using Bramble: boundary_symbols, label, identifier, domain, symbols, tuples, conditions
-using Bramble: marker_identifiers
 using Bramble:
-               label_identifiers,
                label_symbols,
                label_tuples,
                label_conditions,
-               point_type,
                topo_dim,
                is_collapsed,
                center,
@@ -44,9 +40,8 @@ struct NotAFunctionPredicate end
     func3 = x -> x[1] == 0.0
 
     # Invariant: Marker instances associate a symbol label with a boundary symbol,
-    # a set of symbols, or a raw closure condition. MarkerPair instances provide
-    # convenient pair notation (`:label => identifier`).
-    @testset "Marker and MarkerPair data structures" begin
+    # a set of symbols, or a raw closure condition.
+    @testset "Marker data structures" begin
         m_sym = Marker(:boundary, :left)
         m_tup = Marker(:corners, Set((:top, :right)))
         # A function-valued marker holds the raw closure directly without wrapping.
@@ -60,11 +55,6 @@ struct NotAFunctionPredicate end
 
         @test label(m_fun) === :region
         @test identifier(m_fun) === func1
-
-        # MarkerPair
-        pair_sym = :inlet => :left
-        @test label(pair_sym) === :inlet
-        @test identifier(pair_sym) === :left
     end
 
     # Invariant: Boundary symbols for 1D, 2D, and 3D geometries are extractable
@@ -295,15 +285,11 @@ struct NotAFunctionPredicate end
         @test eltype(Ω1_def) === Float64
         @test eltype(typeof(Ω1_def)) === Float64
         @test topo_dim(Ω1_def) == 1
-        @test point_type(Ω1_def) === Float64
-        @test point_type(typeof(Ω1_def)) === Float64
 
         Ω2_def = domain(I2D)
         @test set(Ω2_def) === I2D
         @test dim(Ω2_def) == 2
         @test eltype(Ω2_def) === Float32
-        @test point_type(Ω2_def) === NTuple{2, Float32}
-        @test point_type(typeof(Ω2_def)) === NTuple{2, Float32}
 
         # Domain constructed with preallocated DomainMarkers.
         markers_premade = markers(I2D, :neumann => :top, :fixed => func1)
@@ -344,51 +330,10 @@ struct NotAFunctionPredicate end
         lbls = Set(labels(Ω))
         @test lbls == Set([:bnd_left, :corners, :region1, :boundary])
 
-        @test length(collect(marker_identifiers(Ω))) == 4
-
-        # `marker_identifiers` is a concretely typed tuple holding one `Symbol`, one
-        # `Set{Symbol}` and one `Function`, in symbols, tuples, conditions order.
-        Ω_ids = domain(
-            interval(0.0, 1.0) × interval(0.0, 1.0),
-            :s => :left,
-            :t => (:top, :right),
-            :f => x -> true
-        )
-        ids = marker_identifiers(Ω_ids)
-        @test length(ids) == 3
-        @test count(id -> id isa Symbol, ids) == 1
-        @test count(id -> id isa Set{Symbol}, ids) == 1
-        @test count(id -> id isa Function, ids) == 1
-        @test ids[1] === :left
-        @test ids[2] == Set([:top, :right])
-        @test ids[3] isa Function
-        @test ids isa Tuple
-        @test (@inferred marker_identifiers(Ω_ids)) isa Tuple
-        @test isconcretetype(typeof(ids))
-
-        # All five kinds at once: the unrolled tuple still infers, in kind order.
-        P = Bramble.polygon([(0.2, 0.2), (0.8, 0.2), (0.5, 0.8)])
-        Ω_mix = domain(
-            interval(0.0, 1.0) × interval(0.0, 1.0),
-            :s => :left,
-            :t => (:top, :right),
-            :f => x -> true,
-            :P => P,
-            :D => Bramble.levelset(p -> (p[1] - 0.5)^2 + (p[2] - 0.5)^2 - 0.04)
-        )
-        mixed = @inferred marker_identifiers(Ω_mix)
-        @test isconcretetype(typeof(mixed))
-        @test length(mixed) == 5
-        @test mixed[1] === :left
-        @test mixed[2] == Set([:top, :right])
-        @test mixed[3] isa Function
-        @test mixed[4] === P
-        @test mixed[5] isa Bramble.LevelSet
-
         @test Set(label_symbols(Ω)) == Set([:bnd_left, :boundary])
         @test Set(label_tuples(Ω)) == Set([:corners])
         @test Set(label_conditions(Ω)) == Set([:region1])
-        @test Set(label_identifiers(Ω)) == Set([:bnd_left, :corners, :region1, :boundary])
+        @test Set(labels(Ω)) == Set([:bnd_left, :corners, :region1, :boundary])
 
         # Dimension projection onto 1D coordinate intervals.
         proj1 = projection(Ω, 1)
@@ -420,7 +365,7 @@ struct NotAFunctionPredicate end
         @test length(collect(symbols(dm_eval))) == 1
         @test length(collect(tuples(dm_eval))) == 0
         @test length(collect(conditions(dm_eval))) == 1
-        @test Set(collect(label_identifiers(dm_eval))) == Set([:moving, :fixed_bnd])
+        @test Set(collect(labels(dm_eval))) == Set([:moving, :fixed_bnd])
         @test Set(collect(label_symbols(dm_eval))) == Set([:fixed_bnd])
         @test isempty(collect(label_tuples(dm_eval)))
         @test Set(collect(label_conditions(dm_eval))) == Set([:moving])
@@ -451,7 +396,6 @@ struct NotAFunctionPredicate end
         @inferred dim(Ω)
         @inferred eltype(Ω)
         @inferred topo_dim(Ω)
-        @inferred point_type(Ω)
         @inferred projection(Ω, 1)
         @inferred boundary_symbols(Ω)
         @inferred is_collapsed(Ω)
@@ -495,9 +439,9 @@ struct NotAFunctionPredicate end
             end;
             c
         )
-        iterate_label_identifiers(dom) = (
+        iterate_labels(dom) = (
             c = 0;
-            for l in label_identifiers(dom)
+            for l in labels(dom)
                 c += 1
             end;
             c
@@ -511,9 +455,8 @@ struct NotAFunctionPredicate end
         # sweep across all three marker categories no longer flattens heterogeneous
         # iterators (previously ~224 B; measured directly at 96-176 B depending on marker
         # count on the pre-#99 commit, 43df4c0) -- it concatenates three unrolled tuples.
-        @test_allocs label_identifiers(Ω_markers)
         @test_allocs labels(Ω_markers)
-        @test_allocs iterate_label_identifiers(Ω_markers)
+        @test_allocs iterate_labels(Ω_markers)
     end
 
     # Invariant: Textual display formatting for markers, marker containers, and
@@ -540,6 +483,16 @@ struct NotAFunctionPredicate end
         show(io, dm)
         @test endswith(String(take!(io)), "DomainMarkers(3 total)")
         @test endswith(sprint(show, MIME"text/plain"(), dm), "Function markers (1):\n    :fn => <function>")
+
+        # A region row ends exactly on its description, in magenta like a function row.
+        V = [(0.2f0, 2.2f0), (0.8f0, 2.2f0), (0.5f0, 2.8f0)]
+        dm_reg = markers(I2D, :P => Bramble.polygon(V), :L => Bramble.levelset(x -> x[1] - 0.5f0))
+        @test endswith(sprint(show, MIME"text/plain"(), dm_reg),
+            "Level-set markers (1):\n    :L => <levelset>")
+        colored(x) = sprint(show, MIME"text/plain"(), x; context = :color => true)
+        @test endswith(colored(dm_reg), "    \e[32m:L\e[39m => \e[35m<levelset>\e[39m")
+        @test occursin("    \e[32m:P\e[39m => \e[35m<polygon, 3 vertices>\e[39m\n", colored(dm_reg))
+        @test endswith(colored(dm), "    \e[32m:fn\e[39m => \e[35m<function>\e[39m")
 
         show(io, MIME"text/plain"(), markers(I1D))
         @test occursin("(empty)", String(take!(io)))
@@ -652,7 +605,6 @@ struct NotAFunctionPredicate end
     @testset "Evaluated domain: markers and traits" begin
         using Bramble:
                        EvaluatedDomainMarkers,
-                       label_identifiers,
                        label_symbols,
                        label_tuples,
                        label_conditions
@@ -675,7 +627,7 @@ struct NotAFunctionPredicate end
         cs = @inferred conditions(edm_mixed)
         @test identifier(cs[1])((0.8, 0.0)) && !identifier(cs[1])((0.3, 0.0))
         @test identifier(cs[2])((0.3, 0.0)) && !identifier(cs[2])((0.2, 0.0))
-        @test_allocs label_identifiers(edm_mixed)
+        @test_allocs labels(edm_mixed)
 
         # Capturing closures carry data, so the classification must fold on their type.
         mk_x(c) = x -> x[1] > c
@@ -687,7 +639,7 @@ struct NotAFunctionPredicate end
         @test identifier(cs_cap[1])((0.8, 0.0)) && !identifier(cs_cap[1])((0.3, 0.0))
         @test identifier(cs_cap[2])((0.6, 0.0)) && !identifier(cs_cap[2])((0.4, 0.0))
         @test_allocs conditions(edm_cap)
-        @test_allocs label_identifiers(edm_cap)
+        @test_allocs labels(edm_cap)
 
         # The (t, p) path classifies the same way: spatial passes through, (x, t, p) is
         # fixed at (t, p) as f(x, t, p) (#615).
@@ -702,7 +654,7 @@ struct NotAFunctionPredicate end
         @test identifier(cs_par[2])((2.9, 0.0)) === true
         @test identifier(cs_par[2])((3.1, 0.0)) === false
         @test_allocs conditions(edm_par)
-        @test_allocs label_identifiers(edm_par)
+        @test_allocs labels(edm_par)
 
         # A 3-arg method outranks a 1-arg one on this path: fixed at (t, p), not passed.
         g_par(x) = -100.0
@@ -713,7 +665,7 @@ struct NotAFunctionPredicate end
         @test identifier(cs_g[2])((1.0,)) === -1.5
         @test identifier(cs_g[2])((0.0,)) === -2.5
         @test_allocs conditions(edm_g)
-        @test_allocs label_identifiers(edm_g)
+        @test_allocs labels(edm_g)
 
         # A ComposedFunction or a Fix wrapping a spatial predicate is spatial on both
         # paths, judged by what it wraps (#632). Fix1(<, c) has no 3-arg `<`; first has a
@@ -743,7 +695,7 @@ struct NotAFunctionPredicate end
         @test identifier(cs_w[2])((2.9, 0.0)) === true
         @test identifier(cs_w[2])((3.1, 0.0)) === false
         @test_allocs conditions(edm_w)
-        @test_allocs label_identifiers(edm_w)
+        @test_allocs labels(edm_w)
 
         # A Fix1 of a 3-arg (a, x, t) function stays an (x, t) predicate: it is fixed at t.
         g_axt(a, x, t) = a * x[1] + t

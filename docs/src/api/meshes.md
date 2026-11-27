@@ -41,8 +41,8 @@ the same way.
 
 ## Points and spacings
 
-`host_points`, `host_spacings`, `forward_spacings`, `half_spacings`,
-`host_half_spacings`, `stepsize`, `locate_cell` and `cell_measures` are private; see the
+`host_points`, `host_spacings`, `half_spacings`,
+`host_half_spacings`, `locate_cell` and `cell_measures` are private; see the
 [mesh internals page](../internals/mesh.md).
 
 ```@docs

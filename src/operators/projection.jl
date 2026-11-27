@@ -56,20 +56,13 @@ end
 """
     _rule_kernel(rule, space) -> callable
 
-A concretely typed callable mapping a linear grid index to the scalar value `rule` gives
-at that point. Kept a named struct per rule rather than a closure: measured, an anonymous
-closure over the captures here takes a miscompiled path that allocates per grid point
-(gpena/Bramble.jl#64).
+A concretely typed callable mapping a linear grid index to the value `rule` gives at that
+point: a scalar on a scalar space, or all `NC` leaf values at once on a composite space
+sharing one mesh, evaluated once per point and scattered across the leaves. Kept a named
+struct per rule rather than a closure: measured, an anonymous closure over the captures
+here takes a miscompiled path that allocates per grid point (gpena/Bramble.jl#64).
 """
 function _rule_kernel end
-
-"""
-    _rule_scatter_kernel(rule, space, ::Val{NC}) -> callable
-
-As [`_rule_kernel`](@ref), for a rule whose function returns all `NC` leaf values at once,
-so it is evaluated once per point and scattered across the leaves.
-"""
-function _rule_scatter_kernel end
 
 """
     _rule_component(rule, k) -> ProjectionRule
@@ -81,7 +74,7 @@ function _rule_component end
 
 # --- the device fast path (gpena/Bramble.jl#94, #174) ------------------------------- #
 #
-# `_rule_kernel`/`_rule_scatter_kernel` build a callable struct closing over the mesh's
+# `_rule_kernel` builds a callable struct closing over the mesh's
 # point vectors (`points`/`half_points`) and indices (`_RₕKernel`, `_AvgKernel`), which is
 # exactly right for the CPU sweep below but not GPU-compilable: a device array nested in a
 # wrapper struct is not adapted to the device, and passing one into a
@@ -116,8 +109,7 @@ exists for this destination's storage or it doesn't, regardless of which strateg
 policy names within that locality. A device index vector `sel` restricts the fill to those
 linear indices and leaves every other entry of `raw` untouched.
 """
-@inline _device_project!(::HostLocality, rule, raw, sp, sel = nothing) = false
-@inline _device_project!(::DeviceLocality, rule, raw, sp, sel = nothing) = false
+@inline _device_project!(loc, rule, raw, sp, sel = nothing) = false
 
 """
     _device_scatter_project!(loc, rule, raws::Tuple, sp, ::Val{NC}, sel = nothing) -> Bool
@@ -126,8 +118,7 @@ The scatter counterpart of [`_device_project!`](@ref): a dedicated device kernel
 every leaf array in `raws` (`NC` of them, all sharing `sp`'s mesh) in one launch. Same
 `true`/`false` contract, keyed on locality for the same reason.
 """
-@inline _device_scatter_project!(::HostLocality, rule, raws, sp, ::Val, sel = nothing) = false
-@inline _device_scatter_project!(::DeviceLocality, rule, raws, sp, ::Val, sel = nothing) = false
+@inline _device_scatter_project!(loc, rule, raws, sp, ::Val, sel = nothing) = false
 
 # --- the masked device path (gpena/Bramble.jl#297) --------------------------------- #
 #
@@ -177,7 +168,7 @@ in the union of the `markers` regions, through the rule's own device kernel laun
 [`_marker_index_list`](@ref). Always `false` on [`HostLocality`](@ref), where the generic
 sweep folds the mask into its kernel instead.
 """
-@inline _device_masked_project!(::HostLocality, rule, raw, sp, markers) = false
+@inline _device_masked_project!(loc, rule, raw, sp, markers) = false
 function _device_masked_project!(loc::DeviceLocality, rule, raw, sp, markers)
     fill!(raw, zero(eltype(raw)))
     sel = _marker_index_list(raw, mesh(sp), markers)
@@ -185,7 +176,7 @@ function _device_masked_project!(loc::DeviceLocality, rule, raw, sp, markers)
     return _device_project!(loc, rule, raw, sp, sel)
 end
 
-@inline _device_masked_project!(::HostLocality, rule, raws, sp, markers, ::Val) = false
+@inline _device_masked_project!(loc, rule, raws, sp, markers, ::Val) = false
 function _device_masked_project!(loc::DeviceLocality, rule, raws, sp, markers, nc::Val)
     foreach(r -> fill!(r, zero(eltype(r))), raws)
     sel = _marker_index_list(raws[1], mesh(sp), markers)
@@ -325,7 +316,7 @@ function project! end
     n = length(indices(Ωₕ))
     kernel = _rule_kernel(rule, sp)
     _sweep_for!(
-        policy, raw, 1:n, _apply_mask(kernel, Ωₕ, markers, eltype(raw))
+        policy, raw, 1:n, _apply_mask(kernel, Ωₕ, markers, zero(eltype(raw)))
     )
     return uₕ
 end
@@ -352,7 +343,7 @@ end
             return uₕ
         end
         n = length(indices(Ωₕ))
-        kernel = _rule_scatter_kernel(rule, sp, Val(NC))
+        kernel = _rule_kernel(rule, sp)
         _check_value_count(kernel, _probe_index(Ωₕ, markers), NC)
         zeros_nc = ntuple(_ -> zero(eltype(first(raws))), Val(NC))
         _sweep_scatter_for!(
@@ -441,7 +432,4 @@ end
 # Unmasked stays the bare kernel, so the common path carries no mask check at all.
 @inline _apply_mask(kernel, Ωₕ, ::NTuple{0, Symbol}, zeroval) = kernel
 @inline _apply_mask(kernel, Ωₕ, markers::NTuple{N, Symbol}, zeroval) where {N} = _MaskedKernel(
-    kernel, _marker_masks(Ωₕ, markers), _mask_zero_value(zeroval))
-
-@inline _mask_zero_value(::Type{T}) where {T} = zero(T)
-@inline _mask_zero_value(z::Tuple) = z
+    kernel, _marker_masks(Ωₕ, markers), zeroval)

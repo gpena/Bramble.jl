@@ -57,11 +57,3 @@ Public = false
 Filter = x -> x in (Bramble._gpu_for!, Bramble._gpu_scatter_for!)
 Pages = ["utils/linear_algebra.jl", ]
 ```
-
-## Macros
-
-```@autodocs
-Modules = [Bramble]
-Public = false
-Pages = ["utils/macros.jl", ]
-```

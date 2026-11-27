@@ -59,10 +59,9 @@ function suitesparse_factorize(
         sym = :auto, kwargs...
 )
     _reject_factorize_symmetrize(:suitesparse_factorize, kwargs)
-    A = assemble(
+    A = _assembled_csc(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
-    A = _as_csc(A)
     return _suitesparse_factorize(A; sym = sym, kwargs...)
 end
 
@@ -89,10 +88,9 @@ function suitesparse_solve(
         a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing,
         symmetrize::Bool = false, sym = :auto, kwargs...
 )
-    A, F = assemble(
+    A, F = _assembled_csc(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components, symmetrize = symmetrize
     )
-    A = _as_csc(A)
     u = _suitesparse_solve(A, F; sym = sym, kwargs...)
     return element(trial_space(a), u)
 end
@@ -124,24 +122,15 @@ See also [`refactor!`](@ref), [`suitesparse_factorize`](@ref).
 function suitesparse_refactor! end
 
 function _suitesparse_factorize(A; kwargs...)
-    _ext_loaded(:BrambleSuiteSparseExt) && _throw_unsupported_matrix("suitesparse_factorize", A)
-    return error(
-        "suitesparse_factorize requires SuiteSparse.jl. Add `using SuiteSparse` before calling this function.",
-    )
+    return _ext_fallback(:BrambleSuiteSparseExt, "suitesparse_factorize", A)
 end
 
 function _suitesparse_solve(A, ::Any; kwargs...)
-    _ext_loaded(:BrambleSuiteSparseExt) && _throw_unsupported_matrix("suitesparse_solve", A)
-    return error(
-        "suitesparse_solve requires SuiteSparse.jl. Add `using SuiteSparse` before calling this function.",
-    )
+    return _ext_fallback(:BrambleSuiteSparseExt, "suitesparse_solve", A)
 end
 
 function suitesparse_refactor!(::SuiteSparseFactorization, A)
-    _ext_loaded(:BrambleSuiteSparseExt) && _throw_unsupported_matrix("suitesparse_refactor!", A)
-    return error(
-        "suitesparse_refactor! requires SuiteSparse.jl. Add `using SuiteSparse` before calling this function.",
-    )
+    return _ext_fallback(:BrambleSuiteSparseExt, "suitesparse_refactor!", A)
 end
 
 # `qr` on a `SparseMatrixCSC` is SPQR (`SparseArrays.SPQR`), always available since
@@ -161,7 +150,8 @@ not be square, and this needs only `SparseArrays` -- already a dependency of Bra
 
 A `BilinearForm` on a dense or CSR backend is converted to `SparseMatrixCSC` first.
 
-`kwargs` (`tol`, `ordering`, ...) are forwarded to `SparseArrays.SPQR.qr`.
+`kwargs` (`tol`, `ordering`, ...) are forwarded to `SparseArrays.SPQR.qr`. The form method
+refuses `symmetrize` with an `ArgumentError`, as [`suitesparse_factorize`](@ref) does.
 
 # Examples
 
@@ -181,10 +171,10 @@ end
 function suitesparse_qr_factorize(
         a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, kwargs...
 )
-    A = assemble(
+    _reject_factorize_symmetrize(:suitesparse_qr_factorize, kwargs)
+    A = _assembled_csc(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
-    A = _as_csc(A)
     return qr(A; kwargs...)
 end
 
@@ -219,10 +209,9 @@ end
 function suitesparse_qr_solve(
         a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing, kwargs...
 )
-    A, F = assemble(
+    A, F = _assembled_csc(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
-    A = _as_csc(A)
     u = qr(A; kwargs...) \ F
     return element(trial_space(a), u)
 end

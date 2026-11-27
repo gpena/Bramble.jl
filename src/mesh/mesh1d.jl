@@ -126,8 +126,8 @@ share them), and an identity of its own.
 """
 function _rebackend(Ωₕ::Mesh1D, be::Backend, f::F) where {F}
     s = _st(Ωₕ)
-    r = Mesh1DState(s.set, s.indices, be, f(s.pts), f(s.half_pts), f(s.half_spacings),
-        f(s.spacings), s.collapsed, s.version, s.uniform, s.words, _next_mesh_uid())
+    r = _restate(s; backend = be, pts = f(s.pts), half_pts = f(s.half_pts),
+        half_spacings = f(s.half_spacings), spacings = f(s.spacings), uid = _next_mesh_uid())
     m = Mesh1D(markers(Ωₕ), _marker_ids(Ωₕ), r, copy(_predicate_labels(Ωₕ)))
     setfield!(m, :parent_predicate_labels, _parent_predicate_labels(Ωₕ))
     return m
@@ -151,20 +151,23 @@ from its submeshes' states. A state is its own walk state.
 
 @inline _set_state!(Ωₕ::Mesh1D, s::Mesh1DState) = (setfield!(Ωₕ, :state, s); return nothing)
 
-# `s` with the named fields replaced; `set`, `backend`, `collapsed` and `uid` never change.
+# `s` with the named fields replaced; `set` and `collapsed` never change. The type parameters
+# follow the new fields, so a `backend` of another type gives a state of another type.
 @inline function _restate(
         s::Mesh1DState;
         indices = s.indices,
+        backend = s.backend,
         pts = s.pts,
         half_pts = s.half_pts,
         half_spacings = s.half_spacings,
         spacings = s.spacings,
         version = s.version,
         uniform = s.uniform,
-        words = s.words
+        words = s.words,
+        uid = s.uid
 )
-    return typeof(s)(s.set, indices, s.backend, pts, half_pts, half_spacings, spacings,
-        s.collapsed, version, uniform, words, s.uid)
+    return Mesh1DState(s.set, indices, backend, pts, half_pts, half_spacings, spacings,
+        s.collapsed, version, uniform, words, uid)
 end
 
 # The default-tolerance uniformity of `s`'s current spacings: what `uniform` stores. `mag`
@@ -172,7 +175,11 @@ end
 @inline function _computed_uniform(s::Mesh1DState)
     p = host_points(s)
     mag = max(abs(first(p)), abs(last(p)))
-    return _uniform_at_default_tol(host_spacings(s), eltype(s), mag)
+    h = host_spacings(s)
+    n = length(h)
+    n <= 1 && return true
+    h_ref = h[1]
+    return _uniform_scan(h, h_ref, _default_is_uniform_tol(eltype(s), h_ref, n, mag), n)
 end
 
 @inline _marker_words(Ωₕ::_Mesh1DLike) = _st(Ωₕ).words
@@ -244,7 +251,7 @@ its own to keep in sync. A state answers the version it was built at.
 # `Array` instead.
 @inline function point(Ωₕ::_Mesh1DLike, i)
     idx = _extract_linear_index(i)
-    _check_point_bounds(Ωₕ, idx, "point")
+    _check_point_bounds(Ωₕ, idx)
     return _point(locality(typeof(points(Ωₕ))), Ωₕ, idx)
 end
 
@@ -280,10 +287,7 @@ no copy -- `host_points(Ωₕ) === points(Ωₕ)`; only a device-backed mesh pay
 
 See also: [`host_spacings`](@ref), [`points`](@ref), [`point`](@ref).
 """
-@inline host_points(Ωₕ::_Mesh1DLike) = _host_points(locality(typeof(points(Ωₕ))), Ωₕ)
-
-@inline _host_points(::HostLocality, Ωₕ::_Mesh1DLike) = points(Ωₕ)
-@inline _host_points(::DeviceLocality, Ωₕ::_Mesh1DLike) = Array(points(Ωₕ))
+@inline host_points(Ωₕ::_Mesh1DLike) = _host_array(points(Ωₕ))
 
 """
     locate_cell(Ωₕ::Mesh1D, x::Real) -> Int
@@ -421,10 +425,7 @@ no copy; only a device-backed mesh pays the one bulk `Array(...)` transfer.
 
 See also: [`spacings`](@ref), [`spacing`](@ref), [`forward_spacing`](@ref).
 """
-@inline host_spacings(Ωₕ::_Mesh1DLike) = _host_spacings(locality(typeof(spacings(Ωₕ))), Ωₕ)
-
-@inline _host_spacings(::HostLocality, Ωₕ::_Mesh1DLike) = spacings(Ωₕ)
-@inline _host_spacings(::DeviceLocality, Ωₕ::_Mesh1DLike) = Array(spacings(Ωₕ))
+@inline host_spacings(Ωₕ::_Mesh1DLike) = _host_array(spacings(Ωₕ))
 
 """
     host_half_spacings(Ωₕ::Mesh1D) -> Vector
@@ -438,30 +439,7 @@ directly with no copy; only a device-backed mesh pays the one bulk `Array(...)` 
 
 See also: [`host_spacings`](@ref), [`half_spacings`](@ref), [`half_spacing`](@ref).
 """
-@inline host_half_spacings(Ωₕ::_Mesh1DLike) = _host_half_spacings(locality(typeof(half_spacings(Ωₕ))), Ωₕ)
-
-@inline _host_half_spacings(::HostLocality, Ωₕ::_Mesh1DLike) = half_spacings(Ωₕ)
-@inline _host_half_spacings(::DeviceLocality, Ωₕ::_Mesh1DLike) = Array(half_spacings(Ωₕ))
-
-"""
-    forward_spacings(Ωₕ::Mesh1D) -> AbstractVector
-
-Return the forward spacings of `Ωₕ`, where `forward_spacings(Ωₕ)[i]` is
-[`forward_spacing`](@ref)`(Ωₕ, i)`. Unlike [`spacings`](@ref), this is not cached: it is
-[`spacing`](@ref)'s vector read one index ahead, a new vector each call, of the same array
-type as `spacings(Ωₕ)`.
-
-See also: [`forward_spacing_for_derivative`](@ref).
-"""
-@inline function forward_spacings(Ωₕ::_Mesh1DLike)
-    h = spacings(Ωₕ)
-    n = length(h)
-    n == 1 && return copy(h)
-    f = similar(h)
-    copyto!(f, 1, h, 2, n - 1)
-    copyto!(f, n, h, n, 1)
-    return f
-end
+@inline host_half_spacings(Ωₕ::_Mesh1DLike) = _host_array(half_spacings(Ωₕ))
 
 # A one-point mesh's raw half-spacing is zero, which collapse detection reads. As a measure
 # it is coerced to one by `_apply_hs_logic` (#89), into `similar(hs)` by broadcast so a
@@ -620,7 +598,7 @@ end
     else
         be = s.backend
         _set_state!(Ωₕ,
-            _restate(s; indices = generate_indices(n), pts, half_pts = vector(be, n + 1),
+            _restate(s; indices = CartesianIndices((n,)), pts, half_pts = vector(be, n + 1),
                 half_spacings = vector(be, n), spacings = vector(be, n)))
     end
 
@@ -671,7 +649,7 @@ Return the `i`-th submesh of `Ωₕ`. A 1D mesh is its own only submesh, returni
 # type already gives; a caller that hits it once should stop calling this per point and call
 # `host_spacings(Ωₕ)` once instead, as `stencil_matrix.jl` now does.
 @inline function spacing(Ωₕ::_Mesh1DLike, i::Int)
-    _check_point_bounds(Ωₕ, i, "spacing")
+    _check_point_bounds(Ωₕ, i)
     return @inbounds spacings(Ωₕ)[i]
 end
 
@@ -723,7 +701,7 @@ end
 # `spacings(Ωₕ)` and is left to throw the array type's own raw scalar-indexing error rather
 # than a redirect added here. Use `host_spacings(Ωₕ)` for a per-point loop instead.
 @inline function forward_spacing(Ωₕ::_Mesh1DLike, i::Int)
-    _check_point_bounds(Ωₕ, i, "forward_spacing")
+    _check_point_bounds(Ωₕ, i)
     # forward_spacing(i) is spacing(i + 1) away from the last point, and repeats the
     # final interval at it, which is exactly what the cached vector already holds.
     n = npoints(Ωₕ)
@@ -758,7 +736,7 @@ end
 end
 
 @inline function half_spacing(Ωₕ::_Mesh1DLike, i::Int)
-    _check_point_bounds(Ωₕ, i, "half_spacing")
+    _check_point_bounds(Ωₕ, i)
     return _st(Ωₕ).half_spacings[i]
 end
 
@@ -766,7 +744,7 @@ end
 
 @inline function cell_measure(Ωₕ::_Mesh1DLike, i)
     idx = _extract_linear_index(i)
-    _check_point_bounds(Ωₕ, idx, "cell_measure")
+    _check_point_bounds(Ωₕ, idx)
     return _apply_hs_logic(half_spacing(Ωₕ, idx))
 end
 
@@ -1073,7 +1051,7 @@ _launch_refine_indices!(new_points, old_points, N_old, dev) = _throw_no_ka_mesh_
 end
 
 # Device counterpart of the method above, reached only for the two cases `_mesh` does not
-# route through the fused `_uniform_mesh1d_init!` kernel: a single-point mesh and a
+# route through the fused `_launch_uniform_mesh1d_init!` kernel: a single-point mesh and a
 # non-uniform one. `unif` and `backend` are carried to keep this method's signature distinct
 # from the `Array` one above, since with `unif` dropped a three-argument device method would
 # be ambiguous with it. Past the single-point guard `unif` is always `false`. The fill runs
@@ -1185,26 +1163,6 @@ function half_spacing!(x::AbstractVector, Ωₕ)
     return nothing
 end
 
-# Fused device counterpart of `_points!` + `spacing!` + `half_points!` + `half_spacing!`
-# together (gpena/Bramble.jl#303): one kernel launch fills `pts`, `half_pts`, `spacings`
-# and `half_spacings` from `a`, `b`, `h` and `n` alone. `_mesh` below is the only caller, before
-# a `Mesh1D` exists to pass in, which is why this takes the raw arrays rather than `Ωₕ`.
-@inline function _uniform_mesh1d_init!(
-        pts::AbstractVector,
-        half_pts,
-        spacings,
-        half_spacings,
-        a,
-        b,
-        h,
-        n::Int,
-        backend
-)
-    dev = ka_device(backend)
-    _launch_uniform_mesh1d_init!(pts, half_pts, spacings, half_spacings, a, b, h, n, dev)
-    return nothing
-end
-
 # Fused device counterpart of `spacing!` + `half_points!` + `half_spacing!` together
 # (gpena/Bramble.jl#305): one kernel launch fills `spacings`, `half_pts` and
 # `half_spacings` from `pts` alone, over `1:(n + 1)` work items, reading only each thread's
@@ -1293,7 +1251,7 @@ function _mesh(
         S = eltype(pts)
         a, b = convert.(S, extrema(set))
         h = (b - a) / (n_points - 1)
-        _uniform_mesh1d_init!(
+        _launch_uniform_mesh1d_init!(
             pts,
             _half_pts,
             _spacings,
@@ -1302,7 +1260,7 @@ function _mesh(
             b,
             h,
             n_points,
-            backend
+            ka_device(backend)
         )
     elseif pts isa Array
         # Populate the vector with coordinates, either uniformly or non-uniformly.
@@ -1314,7 +1272,7 @@ function _mesh(
     end
     is_uniform && n_points >= 2 && _check_uniform_distinct(pts, set)
 
-    idxs = generate_indices(n_points)
+    idxs = CartesianIndices((n_points,))
 
     # Instantiate the Mesh1D struct with initial (empty) markers. The uniformity flag is set
     # below, once the spacings it is read from are filled.
@@ -1341,17 +1299,17 @@ function _mesh(
     # (gpena/Bramble.jl#636); `all` reduces on the device for a device vector.
     if !all(isfinite, half_points(mesh))
         a, b = extrema(set)
-        _throw_half_point_overflow(n_points, a, b, eltype(pts))
+        _throw_mesh_overflow("half-point", n_points, a, b, eltype(pts))
     end
     # A spacing `b - a` overflows too, with both points finite (gpena/Bramble.jl#867).
     if !all(isfinite, spacings(mesh))
         a, b = extrema(set)
-        _throw_spacing_overflow(n_points, a, b, eltype(pts))
+        _throw_mesh_overflow("spacing", n_points, a, b, eltype(pts))
     end
     # A cell measure sums two finite half-spacings and overflows on its own (#970).
     if !all(isfinite, half_spacings(mesh))
         a, b = extrema(set)
-        _throw_cell_measure_overflow(n_points, a, b, eltype(pts))
+        _throw_mesh_overflow("cell measure", n_points, a, b, eltype(pts))
     end
 
     # Finally, apply the domain markers to the mesh points.
@@ -1359,21 +1317,10 @@ function _mesh(
     return mesh
 end
 
-@noinline function _throw_half_point_overflow(n, a, b, T)
-    msg = "a mesh of $n points in [$a, $b] with eltype $T makes a half-point overflow " *
+# `what` names the quantity that overflowed: "half-point", "spacing" or "cell measure".
+@noinline function _throw_mesh_overflow(what, n, a, b, T)
+    msg = "a mesh of $n points in [$a, $b] with eltype $T makes a $what overflow " *
           "$T. Use a wider eltype"
-    throw(ArgumentError(msg))
-end
-
-@noinline function _throw_spacing_overflow(n, a, b, T)
-    msg = "a mesh of $n points in [$a, $b] with eltype $T makes a spacing overflow " *
-          "$T. Use a wider eltype"
-    throw(ArgumentError(msg))
-end
-
-@noinline function _throw_cell_measure_overflow(n, a, b, T)
-    msg = "a mesh of $n points in [$a, $b] with eltype $T makes a cell measure " *
-          "overflow $T. Use a wider eltype"
     throw(ArgumentError(msg))
 end
 
@@ -1401,17 +1348,9 @@ end
 # mutation, so a failed refinement leaves the mesh unchanged; a device vector is read once
 # through a host copy.
 function _refined_points(Ωₕ::Mesh1D)
-    # Do nothing if the mesh is just a single point.
-    if is_collapsed(Ωₕ)
-        return nothing
-    end
+    _nothing_to_refine(Ωₕ) && return nothing
 
     N_old = npoints(Ωₕ)
-
-    # No intervals to refine if there's only one point.
-    if N_old <= 1
-        return nothing
-    end
 
     # Calculate the number of points in the new, refined mesh.
     N_new = 2 * N_old - 1
@@ -1454,7 +1393,7 @@ end
 # Commit points from `_refined_points`, with new indices to match.
 function _commit_refined_points!(Ωₕ::Mesh1D, new_points)
     new_points === nothing && return nothing
-    set_indices!(Ωₕ, generate_indices(length(new_points)))
+    set_indices!(Ωₕ, CartesianIndices((length(new_points),)))
     _set_points_geometry!(Ωₕ, new_points)
     return nothing
 end
@@ -1502,9 +1441,9 @@ gets an identity of its own.
 """
 function Base.copy(Ωₕ::Mesh1D)
     s = _st(Ωₕ)
-    c = Mesh1DState(s.set, s.indices, s.backend, copy(s.pts), copy(s.half_pts),
-        copy(s.half_spacings), copy(s.spacings), s.collapsed, s.version, s.uniform, s.words,
-        _next_mesh_uid())
+    c = _restate(s; pts = copy(s.pts), half_pts = copy(s.half_pts),
+        half_spacings = copy(s.half_spacings), spacings = copy(s.spacings),
+        uid = _next_mesh_uid())
     return _mesh1d_with_markers(_copy_markers(Ωₕ), c, copy(_predicate_labels(Ωₕ)))
 end
 
@@ -1542,33 +1481,29 @@ end
 
 function Base.show(io::IO, ::MIME"text/plain", Ωₕ::Mesh1D{BT, CI, VT, T}) where {BT, CI, VT, T}
     return show_block(io) do io
-        return _show_mesh1d_detailed(io, Ωₕ)
+        pp = PrettyPrinter(io)
+
+        n_pts = npoints(Ωₕ)
+        topodim = topo_dim(Ωₕ)
+        collapsed = is_collapsed(Ωₕ)
+
+        # Header
+        print_mesh_header(pp, "Mesh1D", 1, T)
+        println(io)
+
+        # Summary line
+        print_mesh_summary(pp, n_pts, topodim, collapsed)
+
+        # Domain information
+        print_mesh_domain_info(pp, set(Ωₕ))
+
+        # Spacing information
+        if !collapsed
+            print_mesh_spacing_info(pp, is_uniform(Ωₕ), hₘₐₓ(Ωₕ))
+        end
+
+        # Markers information
+        print_mesh_markers(pp, markers(Ωₕ))
+        return nothing
     end
-end
-
-function _show_mesh1d_detailed(io::IO, Ωₕ::Mesh1D{BT, CI, VT, T}) where {BT, CI, VT, T}
-    pp = PrettyPrinter(io)
-
-    n_pts = npoints(Ωₕ)
-    topodim = topo_dim(Ωₕ)
-    collapsed = is_collapsed(Ωₕ)
-
-    # Header
-    print_mesh_header(pp, "Mesh1D", 1, T, n_pts)
-    println(io)
-
-    # Summary line
-    print_mesh_summary(pp, n_pts, topodim, collapsed)
-
-    # Domain information
-    print_mesh_domain_info(pp, set(Ωₕ))
-
-    # Spacing information
-    if !collapsed
-        print_mesh_spacing_info(pp, is_uniform(Ωₕ), hₘₐₓ(Ωₕ))
-    end
-
-    # Markers information
-    print_mesh_markers(pp, markers(Ωₕ))
-    return nothing
 end

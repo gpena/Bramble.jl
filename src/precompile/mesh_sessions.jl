@@ -63,7 +63,6 @@ function _pc_mesh_session(Ω, npts, unif, be, label::Symbol)
     interior_indices(Ωₕ)
     is_boundary_index(Ωₕ, idx)
     index_in_marker(Ωₕ, label)
-    boundary_symbol_to_dict(indices(Ωₕ))
 
     # The immutable state the assembly walk reads (gpena/Bramble.jl#437), and the same
     # queries through it.
@@ -85,7 +84,6 @@ function _pc_mesh_session(Ω, npts, unif, be, label::Symbol)
         points(Ωₕ),
         half_points(Ωₕ),
         spacings(Ωₕ),
-        forward_spacings(Ωₕ),
         half_spacings(Ωₕ),
         (cell_measure(Ωₕ, idx) for idx in indices(Ωₕ))
     )

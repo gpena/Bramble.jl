@@ -863,54 +863,61 @@ _lap_split(p) = (u, v) -> p[1] * innerₕ(-Δₕ(u(1)), v(1)) + p[2]^2 * inner�
     end
 end
 
-# The `εₕ` and `divₘₕ` builders name each term's component pair in their sum's type
-# (`_ComponentSum`, gpena/Bramble.jl#939), and a scale over it distributes by those pairs.
-# The pairs must agree with the runtime classes of every node, and the tree must be the one
-# the value gates build from the plain sum: the same tree, so the same matrix.
-function _labels_agree(op, P)
-    for side in (:trial, :test)
-        cls = side === :trial ? Bramble._trial_component_class(op) :
-              Bramble._test_component_class(op)
-        expected = cls === nothing ? Bramble._NoComponent() : cls
-        Bramble._labelled_class(typeof(op), P, side) === expected || return false
-    end
-    P isa Tuple{Int, Int} && return true
-    return _labels_agree(op.left_op, P[1]) && _labels_agree(op.right_op, P[2])
+# The `εₕ` and `divₘₕ` builders return the plain sum a user would write out (gpena/Bramble.jl
+# #939), and a scale over it distributes by the component each leaf's type carries
+# (#1229): one concrete type for `simplify_ast` and the same matrix as the scalar times the
+# unscaled one.
+function _hand_div(u, v, ::Val{D}) where {D}
+    foldl(+,
+        ntuple(Val(D)) do i
+            foldl(+,
+                ntuple(
+                    j -> inner₊(Bramble._div_term(u, Val(i), Val(D)),
+                        Bramble._div_term(v, Val(j), Val(D)), Val(ntuple(identity, D))),
+                    Val(D)))
+        end)
 end
-_label_tree(::Bramble._ComponentSum{D, P}) where {D, P} = P
+
+# A coefficient captured by the form closure, over a builder's sum: `form` infers one type.
+_scaled_builder(b, c, W) = form(W, W, (u, v) -> c * inner₊(b(u), b(v)))
+_scaled_rows(∇, c, W) = form(W, W, (u, v) -> c * inner₊(∇(u), ∇(v)))
 
 @testset "builder sums: scaled by type (#939)" begin
+    asm(W, f) = Matrix(assemble(form(W, W, f)))
     for D in (WITH_3D_TESTS ? (2, 3) : (2,))
         Ωₕ = mesh(domain(box(ntuple(_ -> 0.0, D), ntuple(_ -> 1.0, D))), ntuple(d -> 4 + d, D))
         W = gridspace(Ωₕ)^Val(D)
         u, v = trial_function(W), test_function(W)
-        for built in (inner₊(εₕ(u), εₕ(v)), inner₊(divₘₕ(u), divₘₕ(v)))
-            @test built isa Bramble._ComponentSum
-            @test _labels_agree(built.sum, _label_tree(built))
+        @test inner₊(divₘₕ(u), divₘₕ(v)) === _hand_div(u, v, Val(D))
+        for builder in (εₕ, divₘₕ)
+            built = inner₊(builder(u), builder(v))
+            @test built isa OperatorAdd
             res(x) = resolve_ast(x)
-            for c in (2.5, 2, -1, Ref(2.5))
-                @test simplify_ast(res(c * built)) === simplify_ast(res(c * built.sum))
+            for c in (2.5, Ref(2.5))
+                @test _infers(_scaled_builder, (typeof(builder), typeof(c), typeof(W)))
             end
-            @test simplify_ast(res(-built)) === simplify_ast(res(-built.sum))
-            @test simplify_ast(res(0 * built)) === simplify_ast(res(0 * built.sum))
-            @test simplify_ast(res(built)) === simplify_ast(res(built.sum))
+            for c in (2.5, 2, -1, Ref(2.5))
+                c₀ = c isa Ref ? c[] : c
+                @test asm(W, (u, v) -> c * inner₊(builder(u), builder(v))) ≈
+                      c₀ * asm(W, (u, v) -> inner₊(builder(u), builder(v)))
+            end
+            @test simplify_ast(res(-built)) isa OperatorAdd
+            @test simplify_ast(res(0 * built)) isa ZeroOperator
         end
     end
 
-    # Labels that do not fit the tree fall back to the value gates, with the same result.
+    # A user-written sum takes the same gates.
     Ω₁ = mesh(domain(interval(0.0, 1.0)), 11, true)
     V₂ = gridspace(Ω₁)^Val(2)
     u, v = trial_function(V₂), test_function(V₂)
     s = innerₕ(u(1), v(1)) + innerₕ(u(2), v(2))
-    wrapped = Bramble._component_sum(s, Val(((1, 1), ((1, 1), (2, 2)))))
-    @test simplify_ast(2.5 * wrapped) === simplify_ast(2.5 * s)
-    @test simplify_ast(2.5 * s) isa OperatorAdd   # the fallback distributes this sum
+    @test simplify_ast(2.5 * s) isa OperatorAdd   # this sum is distributed
 end
 
-# Wherever a builder's sum sits, `form` stores no `_ComponentSum` and assembles what the
-# plain sum assembles, bit for bit; the unsimplified tree prints as the plain one. A
-# restriction keeps an operand naming one component as built, so the builder's sum must
-# name more than one for the restriction to unwrap it (the three forms that crashed).
+# Wherever a builder's sum sits, `form` assembles what the hand-written sum assembles, bit
+# for bit; the unsimplified tree prints as the plain one. A restriction keeps an operand
+# naming one component as built, so a sum naming more than one must be unwrapped by it
+# (the three forms that crashed when the builders labelled their sums).
 _bits(A) = (A.colptr, A.rowval, reinterpret(UInt64, A.nzval))
 _strain(u, v) = inner₊(εₕ(u), εₕ(v))
 _div(u, v) = inner₊(divₘₕ(u), divₘₕ(v))
@@ -919,34 +926,44 @@ _wrapped_builders = ((_strain, b -> Bramble.restrict_to(:interior, 1.5 * b)),
     (_strain, b -> Bramble.restrict_to(:interior, b)),
     (_div, b -> b + 2.0 * (1.5 * b)))
 
-@testset "builder sums: never stored (#939)" begin
+@testset "builder sums: plain sums (#939)" begin
     Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (7, 8))
     W = gridspace(Ωₕ)^Val(2)
-    for (build, wrap) in _wrapped_builders
-        a = form(W, W, (u, v) -> wrap(build(u, v)))
-        @test !occursin("_ComponentSum", string(typeof(a)))
-        @test _bits(assemble(a)) == _bits(assemble(form(W, W, (u, v) -> wrap(build(u, v).sum))))
-    end
     u, v = trial_function(W), test_function(W)
-    for build in (_strain, _div)
-        @test Bramble.expression(2.0 * build(u, v)) == Bramble.expression(2.0 * build(u, v).sum)
-        @test Bramble.expression(build(u, v) + innerₕ(u(1), v(1))) ==
-              Bramble.expression(build(u, v).sum + innerₕ(u(1), v(1)))
+    hand = Dict(
+        _strain =>
+            (u, v) -> begin
+                a(w) = (1 // 2) * Bramble.Mₓ(D₋ᵧ(w(1)))
+                b(w) = (1 // 2) * Bramble.Mᵧ(D₋ₓ(w(2)))
+                S = Val((1, 2))
+                inner₊(D₋ₓ(u(1)), D₋ₓ(v(1)), Val((1,))) +
+                inner₊(a(u), a(v), S) + inner₊(a(u), b(v), S) +
+                inner₊(b(u), a(v), S) + inner₊(b(u), b(v), S) +
+                inner₊(b(u), b(v), S) + inner₊(b(u), a(v), S) +
+                inner₊(a(u), b(v), S) + inner₊(a(u), a(v), S) +
+                inner₊(D₋ᵧ(u(2)), D₋ᵧ(v(2)), Val((2,)))
+            end,
+        _div => (u, v) -> _hand_div(u, v, Val(2)))
+    for (build, wrap) in _wrapped_builders
+        @test build(u, v) === hand[build](u, v)
+        a = form(W, W, (u, v) -> wrap(build(u, v)))
+        @test _bits(assemble(a)) == _bits(assemble(form(W, W, (u, v) -> wrap(hand[build](u, v)))))
     end
-    # One term names one pair: nothing to label, the plain term.
-    W₁ = gridspace(mesh(domain(interval(0.0, 1.0)), 9))^Val(1)
-    @test !(_strain(trial_function(W₁), test_function(W₁)) isa Bramble._ComponentSum)
+    for build in (_strain, _div)
+        @test Bramble.expression(2.0 * build(u, v)) == Bramble.expression(2.0 * hand[build](u, v))
+        @test Bramble.expression(build(u, v) + innerₕ(u(1), v(1))) ==
+              Bramble.expression(hand[build](u, v) + innerₕ(u(1), v(1)))
+    end
 end
 
-# `∇ₕ`/`∇₊ₕ` of a composite label their rows (`Bramble._GradientRows`, #958), since
-# row `c` is built on `u(c)` and `v(c)` alone, so `inner₊` of two of them names `(c, c)` for
-# it, and a scale over that sum builds the plain sum's tree. A tuple of gradient tuples a
-# user builds may repeat or mix components, so it, and a labelled side meeting it, is not
-# labelled; and `form` stores no wrapper, assembling the plain sum's bits.
+# `∇ₕ`/`∇₊ₕ` of a composite return their rows in a `Bramble._GradientRows` (#958). `inner₊`
+# of two of them is the sum of the tuples they hold, a scale over it distributes by type,
+# and a tuple of gradient tuples a user builds, which may repeat or mix components, takes the
+# same gates. `form` stores no container and assembles the plain sum's bits.
 _grad(u, v) = inner₊(∇ₕ(u), ∇ₕ(v))
 _fgrad(u, v) = inner₊(∇₊ₕ(u), ∇₊ₕ(v))
 
-@testset "gradient rows: labelled (#958)" begin
+@testset "gradient rows (#958)" begin
     for D in (WITH_3D_TESTS ? (2, 3) : (2,))
         Ωₕ = mesh(domain(box(ntuple(_ -> 0.0, D), ntuple(_ -> 1.0, D))), ntuple(d -> 4 + d, D))
         W = gridspace(Ωₕ)^Val(D)
@@ -954,28 +971,27 @@ _fgrad(u, v) = inner₊(∇₊ₕ(u), ∇₊ₕ(v))
         for ∇ in (∇ₕ, ∇₊ₕ)
             built = inner₊(∇(u), ∇(v))
             plain = inner₊(Tuple(∇(u)), Tuple(∇(v)))
-            @test built isa Bramble._ComponentSum
-            @test _label_tree(built) === foldl((l, r) -> (l, r), ntuple(c -> (c, c), D))
-            @test _labels_agree(built.sum, _label_tree(built))
-            @test built.sum === plain
-            @test !(plain isa Bramble._ComponentSum)
+            @test built === plain
+            @test built isa OperatorAdd
             @test inner₊(∇(u), Tuple(∇(v))) === plain
             @test inner₊(Tuple(∇(u)), ∇(v)) === plain
             @test inner₊(∇(u), ∇(v); markers = (:boundary,)) ===
-                  Bramble.restrict_to(:boundary, built)
+                  Bramble.restrict_to(:boundary, plain)
             res(x) = resolve_ast(x)
+            for c in (2.5, Ref(2.5))
+                @test _infers(_scaled_rows, (typeof(∇), typeof(c), typeof(W)))
+            end
             for c in (2.5, 2, -1, Ref(2.5))
                 @test simplify_ast(res(c * built)) === simplify_ast(res(c * plain))
             end
-            @test simplify_ast(res(built)) === simplify_ast(res(plain))
         end
         # Hand-built tuples: a repeated component, and rows mixing components within them.
         pick(c) = c == D ? 2 : 1
         rep = inner₊(∇ₕ(ntuple(c -> u(pick(c)), D)), ∇ₕ(ntuple(c -> v(pick(c)), D)))
-        @test !(rep isa Bramble._ComponentSum)
+        @test rep isa OperatorAdd
         mixed = inner₊((ntuple(d -> D₋ₓ(u(d)), D), ntuple(d -> D₋ₓ(u(1)), D)),
             (ntuple(d -> D₋ₓ(v(d)), D), ntuple(d -> D₋ₓ(v(1)), D)))
-        @test !(mixed isa Bramble._ComponentSum)
+        @test mixed isa OperatorAdd
     end
 
     Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (7, 8))
@@ -983,9 +999,10 @@ _fgrad(u, v) = inner₊(∇₊ₕ(u), ∇₊ₕ(v))
     for build in (_grad, _fgrad), (_, wrap) in _wrapped_builders
 
         a = form(W, W, (u, v) -> wrap(build(u, v)))
-        @test !occursin("_ComponentSum", string(typeof(a)))
         @test !occursin("_GradientRows", string(typeof(a)))
-        @test _bits(assemble(a)) == _bits(assemble(form(W, W, (u, v) -> wrap(build(u, v).sum))))
+        plain(u, v) = build === _grad ? inner₊(Tuple(∇ₕ(u)), Tuple(∇ₕ(v))) :
+                      inner₊(Tuple(∇₊ₕ(u)), Tuple(∇₊ₕ(v)))
+        @test _bits(assemble(a)) == _bits(assemble(form(W, W, (u, v) -> wrap(plain(u, v)))))
     end
 end
 

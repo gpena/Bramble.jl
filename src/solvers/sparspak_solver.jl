@@ -67,12 +67,13 @@ function sparspak_factorize(A::SparseMatrixCSC)
 end
 
 function sparspak_factorize(
-        a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing
+        a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing, kwargs...
 )
-    A = assemble(
+    _reject_factorize_symmetrize(:sparspak_factorize, kwargs)
+    _reject_unknown_kwargs(:sparspak_factorize, "a::BilinearForm", kwargs, ())
+    A = _assembled_csc(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
-    A = _as_csc(A)
     return _sparspak_factorize(A)
 end
 
@@ -115,10 +116,9 @@ function sparspak_solve(
         a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing,
         symmetrize::Bool = false
 )
-    A, F = assemble(
+    A, F = _assembled_csc(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components, symmetrize = symmetrize
     )
-    A = _as_csc(A)
     u = _sparspak_solve(A, F)
     return element(trial_space(a), u)
 end
@@ -140,22 +140,13 @@ See also [`refactor!`](@ref), [`sparspak_factorize`](@ref).
 function sparspak_refactor! end
 
 function _sparspak_factorize(A)
-    _ext_loaded(:BrambleSparspakExt) && _throw_unsupported_matrix("sparspak_factorize", A)
-    return error(
-        "sparspak_factorize requires Sparspak.jl. Add `using Sparspak` before calling this function.",
-    )
+    return _ext_fallback(:BrambleSparspakExt, "sparspak_factorize", A)
 end
 
 function _sparspak_solve(A, ::Any)
-    _ext_loaded(:BrambleSparspakExt) && _throw_unsupported_matrix("sparspak_solve", A)
-    return error(
-        "sparspak_solve requires Sparspak.jl. Add `using Sparspak` before calling this function.",
-    )
+    return _ext_fallback(:BrambleSparspakExt, "sparspak_solve", A)
 end
 
 function sparspak_refactor!(::SparspakFactorization, A)
-    _ext_loaded(:BrambleSparspakExt) && _throw_unsupported_matrix("sparspak_refactor!", A)
-    return error(
-        "sparspak_refactor! requires Sparspak.jl. Add `using Sparspak` before calling this function.",
-    )
+    return _ext_fallback(:BrambleSparspakExt, "sparspak_refactor!", A)
 end

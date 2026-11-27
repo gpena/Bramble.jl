@@ -573,6 +573,7 @@ _mg_dense_inverse(P) = (n = first(size(P)); reduce(hcat, [P \ [Float64(i == j) f
             Ωf = _mg_jitter_mesh(D, n)
             P = gmg_preconditioner(_mg_spd, Ωf)
             @test P isa GMGPreconditioner{Float64} && P isa AbstractMatrixFreePreconditioner{Float64}
+            @test eltype(P.smoothers) <: ChebyshevSmoother
             op = matrix_free_operator(_mg_spd(gridspace(Ωf)))
             i, r = _mg_cg(op, randn(size(op, 1)), P)
             @test r < 1e-7

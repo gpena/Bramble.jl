@@ -32,6 +32,12 @@ end
 
 const EB = ((-1.2, 1.3), (-1.25, 1.15))
 
+# The path and rotation number `_levelset_class` returns, without the centre it samples.
+function pathρ(φ, box)
+    r = Bramble._levelset_class(φ, box)
+    return (path = r.path, ρ = r.ρ)
+end
+
 function message(φ, box)
     try
         Bramble._levelset_class(φ, box)
@@ -46,15 +52,15 @@ end
     @testset "Symmetric curves take the closure path" begin
         # One grid-aligned symmetry axis gives T² = id, so ρ = 1/2.
         disk = p -> hypot(p[1], p[2]) - 1
-        @test Bramble._levelset_class(disk, ((-1.25, 1.25), (-1.25, 1.25))) == (path = :closure, ρ = 0.5)
+        @test pathρ(disk, ((-1.25, 1.25), (-1.25, 1.25))) == (path = :closure, ρ = 0.5)
         φ, _ = ellipse(1.0, 0.6, 0.0, (0.2, -0.1))
-        @test Bramble._levelset_class(φ, ((-1.0, 1.4), (-0.9, 0.7))) == (path = :closure, ρ = 0.5)
-        @test Bramble._levelset_class(egg(0.0, 0.4), EB) == (path = :closure, ρ = 0.5)
+        @test pathρ(φ, ((-1.0, 1.4), (-0.9, 0.7))) == (path = :closure, ρ = 0.5)
+        @test pathρ(egg(0.0, 0.4), EB) == (path = :closure, ρ = 0.5)
     end
 
     @testset "Box element types are accepted" begin
         disk = p -> hypot(p[1], p[2]) - 1
-        @test Bramble._levelset_class(disk, ((-2, 2), (-1.5f0, 1.5f0))) == (path = :closure, ρ = 0.5)
+        @test pathρ(disk, ((-2, 2), (-1.5f0, 1.5f0))) == (path = :closure, ρ = 0.5)
     end
 
     @testset "Rotated ellipses take the orbit path" begin
@@ -117,13 +123,14 @@ end
     @testset "A disk far from the origin closes" begin
         # T² = id holds to the coordinates' ulps, coarser than 1e-10 of the box at x = 1e6.
         far = p -> hypot(p[1] - 1e6, p[2]) - 1
-        @test Bramble._levelset_class(far, ((1e6 - 1.25, 1e6 + 1.25), (-1.25, 1.25))) == (path = :closure, ρ = 0.5)
+        @test pathρ(far, ((1e6 - 1.25, 1e6 + 1.25), (-1.25, 1.25))) == (path = :closure, ρ = 0.5)
     end
 
     @testset "The result type is inferred" begin
         disk = p -> hypot(p[1], p[2]) - 1
         r = @inferred Bramble._levelset_class(disk, ((-1.25, 1.25), (-1.25, 1.25)))
-        @test r isa @NamedTuple{path::Symbol, ρ::Float64}
+        @test r isa @NamedTuple{path::Symbol, ρ::Float64, c::NTuple{2, Float64}}
+        @test r.c == (0.0, 0.0)
     end
 
     @testset "Curves reaching the box throw" begin

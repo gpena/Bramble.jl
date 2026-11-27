@@ -339,11 +339,7 @@ function mul!(
     yd = _mf_data(y)
     xd = _mf_data(x)
     Base.require_one_based_indexing(yd, xd)
-    if iszero(β)
-        fill!(yd, zero(eltype(yd)))
-    elseif !isone(β)
-        yd .*= β
-    end
+    _scale_only!(yd, β)
     mask = _mf_mask(op)
     # A `false` α walks with its own `Bool` sink, a strong zero as before (#991), reached
     # through `invokelatest`, which inference does not enter, so the `true` of the
@@ -757,14 +753,13 @@ end
 # alone: it folds to a constant, and a unit that scatters never compiles the gather.
 const _MF_GATHER_ENTRIES = 9
 const _MF_LONG = 1 << 20
-const _MFLeaf = Union{TrialFunction, TestFunction, IndexedTrialFunction, IndexedTestFunction}
-_mf_entries(::_MFLeaf) = 1
+_mf_entries(::_AnyLeaf) = 1
 _mf_entries(op::TappedNode) = length(_stencil_taps(op)) * _mf_tapped(op.inner_op)
 _mf_entries(op::_Scale) = _mf_entries(op.inner_op)
 _mf_entries(op::BilinearProduct) = min(_mf_entries(op.left_op) * _mf_entries(op.right_op), _MF_LONG)
 _mf_entries(_) = _MF_LONG
 # The operand of a tap: a leaf, or a scaled one, counts one entry; anything else is long.
-_mf_tapped(::_MFLeaf) = 1
+_mf_tapped(::_AnyLeaf) = 1
 _mf_tapped(op::_Scale) = _mf_tapped(op.inner_op)
 _mf_tapped(_) = _MF_LONG
 
@@ -1712,7 +1707,7 @@ function _mf_host_ast(a::BilinearForm)
     # lets JET reach `_bind_walk(::Any, ::SeparableWeights)` through `host_weights`.
     trs, tes = _summand_leaves(
         leaf -> host_weights(leaf::ScalarGridSpace), _bind_interp_spaces(a.ast, Wu, Wv), Wu, Wv)
-    return _mf_tag_regions(_mf_host_bind(a.ast, trs, tes))
+    return _map_regions(_MFBoundRegion, _mf_host_bind(a.ast, trs, tes))
 end
 
 # `op` with each summand's regions bound against its own leaf (`_walked_leaf`), splitting
@@ -1731,24 +1726,6 @@ struct _MFBoundRegion{R}
 end
 @inline _is_marked(words::AbstractMatrix{UInt64}, r::_MFBoundRegion, lin_idx::Int) = _is_marked(
     words, r.ids, lin_idx)
-
-# `op` with every bound region tagged `_MFBoundRegion`, recursing where `_bind_marker_ids`
-# does.
-_mf_tag_regions(op) = op
-function _mf_tag_regions(op::RegionRestriction{D}) where {D}
-    inner = _mf_tag_regions(op.inner_op)
-    region = _MFBoundRegion(op.region)
-    return RegionRestriction{D, typeof(region), typeof(inner)}(region, inner)
-end
-_mf_tag_regions(op::UnaryWrapper) = _rewrap_inner(op, _mf_tag_regions(op.inner_op))
-function _mf_tag_regions(op::OperatorAdd{D}) where {D}
-    left, right = _mf_tag_regions(op.left_op), _mf_tag_regions(op.right_op)
-    return OperatorAdd{D, typeof(left), typeof(right)}(left, right)
-end
-function _mf_tag_regions(op::BilinearProduct{D, W}) where {D, W}
-    left, right = _mf_tag_regions(op.left_op), _mf_tag_regions(op.right_op)
-    return BilinearProduct{D, W, typeof(left), typeof(right)}(op.inner, left, right)
-end
 
 # A walk entry's `_bind_walk`, but a term `_mf_host_ast` bound passes through, with the
 # marker words of the mesh `sp` walks, which a task's rebuilt walk state carries as the host

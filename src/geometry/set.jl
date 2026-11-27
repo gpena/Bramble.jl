@@ -234,19 +234,6 @@ Extract the `i`-th coordinate dimension of `X` as a 1D [`CartesianProduct`](@ref
 @inline projection(X::CartesianProduct, i::Integer) = interval(X(i)...)
 
 """
-    point_type(X::CartesianProduct{1, T}) -> Type{T}
-    point_type(X::CartesianProduct{D, T}) -> Type{NTuple{D, T}}
-    point_type(::Type{<:CartesianProduct{1, T}}) -> Type{T}
-    point_type(::Type{<:CartesianProduct{D, T}}) -> Type{NTuple{D, T}}
-
-Return the coordinate point representation type for a point in `X`.
-"""
-@inline point_type(::CartesianProduct{1, T}) where {T} = T
-@inline point_type(::CartesianProduct{D, T}) where {D, T} = NTuple{D, T}
-@inline point_type(::Type{<:CartesianProduct{1, T}}) where {T} = T
-@inline point_type(::Type{<:CartesianProduct{D, T}}) where {D, T} = NTuple{D, T}
-
-"""
     in(x, X::CartesianProduct) -> Bool
 
 Query whether point `x` is contained in the closed set `X`.
@@ -296,7 +283,7 @@ Print a 1D set's extent: `Point at v` when the interval is degenerate, `Interval
 otherwise.
 
 Shared with [`Domain`](@ref)'s own detailed renderer, which used to carry a verbatim copy
-(gpena/Bramble.jl#47). Lives here rather than in `geometry/pretty_print.jl` because that
+(gpena/Bramble.jl#47). Lives here rather than in `utils/pretty_print.jl` because that
 file is included *before* this one, so a signature naming `CartesianProduct` there would
 not resolve.
 """
@@ -380,7 +367,7 @@ end
 # the directions of `normal_vector` are all read from these rows. The aliases are per
 # dimension because they are viewpoint names, not the 2D ones extended: in 3D `:left` and
 # `:right` name the y faces and `:back` and `:front` the x ones. `boundary_symbol_to_cartesian`
-# (mesh/marker.jl) is a further table, written by hand.
+# (mesh/marker.jl) reads them too.
 const _BOUNDARY_FACES = (
     ((:xmin, :left, 1, 1), (:xmax, :right, 1, 2)),
     ((:xmin, :left, 1, 1), (:xmax, :right, 1, 2), (:ymin, :bottom, 2, 1), (:ymax, :top, 2, 2)),

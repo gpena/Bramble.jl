@@ -485,7 +485,7 @@ _sum_terms(op::OperatorAdd, ::Nothing) = (_relation_terms(op.left_op)...,
     _relation_terms(op.right_op)...)
 _sum_terms(op::OperatorAdd, ::Tuple) = (op,)
 function _relation_terms(op::_SplitWrapper)
-    return map(t -> _rebuilt_around(op, t), _relation_terms(op.inner_op))
+    return map(t -> _rewrap_value(op, t), _relation_terms(op.inner_op))
 end
 _relation_terms(op) = (op,)
 
@@ -548,7 +548,7 @@ end
 # The terms of `op` with every sum split, conormal blocks too.
 _split_terms(op::OperatorAdd) = (_split_terms(op.left_op)..., _split_terms(op.right_op)...)
 function _split_terms(op::_SplitWrapper)
-    return map(t -> _rebuilt_around(op, t), _split_terms(op.inner_op))
+    return map(t -> _rewrap_value(op, t), _split_terms(op.inner_op))
 end
 _split_terms(op) = (op,)
 
@@ -578,7 +578,7 @@ function _block_part(op::OperatorAdd, e::Int, i::Int)
 end
 function _block_part(op::_SplitWrapper, e::Int, i::Int)
     inner, j = _block_part(op.inner_op, e, i)
-    return _rebuilt_around(op, inner), j
+    return _rewrap_value(op, inner), j
 end
 _unsplit_term(op::_SplitWrapper) = _unsplit_term(op.inner_op)
 function _unsplit_term(op::OperatorAdd)
@@ -622,29 +622,16 @@ end
     return _facet_operator(g, ntuple(_ -> (q, q), Val(D)))
 end
 
-# `op` with each trial leaf replaced by `leaf`, every node rebuilt, so the result is built
-# from `leaf` even where its type is the operand's own (`_rewrap_inner` returns that
-# operand).
+# `op` with each trial leaf replaced by `leaf`, so the result is built from `leaf` even
+# where its type is the operand's own (`_rewrap_inner` would return that operand).
 @inline _retarget(::IndexedTrialFunction, leaf) = leaf
 @inline function _retarget(op::UnaryWrapper, leaf)
-    return _rebuilt_around(op, _retarget(op.inner_op, leaf))
+    return _rewrap_value(op, _retarget(op.inner_op, leaf))
 end
 @inline function _retarget(op::OperatorAdd, leaf)
     return OperatorAdd(_retarget(op.left_op, leaf), _retarget(op.right_op, leaf))
 end
 @inline _retarget(op, leaf) = op
-
-# `_rewrap_inner` (block_extract.jl) without its shortcut: always a new node around `inner`.
-@generated function _rebuilt_around(op::T, inner::I) where {T, I}
-    wrapper = Base.typename(T).wrapper
-    decl = fieldtype(Base.unwrap_unionall(wrapper), :inner_op)
-    params = Any[T.parameters...]
-    params[findfirst(p -> p === decl, Base.unwrap_unionall(wrapper).parameters)] = I
-    args = map(fieldnames(T)) do f
-        f === :inner_op ? :inner : :(getfield(op, $(QuoteNode(f))))
-    end
-    return :($(wrapper{params...})($(args...)))
-end
 
 # `f(Val(i))` for the index `i` of `vals`, a tuple of `Val`s, unrolled as `_at_facet` is.
 @inline _at_index(f::F, ::Tuple{}, i::Int) where {F} = throw(ArgumentError("no index $i"))
