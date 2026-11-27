@@ -66,9 +66,11 @@ Fills `out` with the off-diagonal strain tensor entry
 the average in a single pass rather than two, filled by
 `ext/BrambleKernelAbstractionsExt.jl`.
 """
-_launch_fused_strain_offdiag!(out, ui, uj, hi, hj, dims, dim_i, dim_j, dev) = _throw_no_device_kernel(
-    :vector_calculus, "εₕ!"
-)
+function _launch_fused_strain_offdiag!(out, ui, uj, hi, hj, dims, dim_i, dim_j, dev)
+    _throw_no_device_kernel(
+        :vector_calculus, "εₕ!"
+    )
+end
 
 @inline _direction_spacing(sub, ::Backward) = backward_spacings_for_derivative(sub)
 @inline _direction_spacing(sub, ::Forward) = forward_spacings_for_derivative(sub)

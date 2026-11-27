@@ -359,8 +359,8 @@ end
 @noinline function _throw_both_components()
     throw(
         ArgumentError(
-            "pass either `components` or its alias `dirichlet_components`, not both"
-        )
+        "pass either `components` or its alias `dirichlet_components`, not both"
+    )
     )
 end
 

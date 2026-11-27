@@ -867,10 +867,16 @@ end
 # #939), and a scale over it distributes by the component each leaf's type carries
 # (#1229): one concrete type for `simplify_ast` and the same matrix as the scalar times the
 # unscaled one.
-_hand_div(u, v, ::Val{D}) where {D} = foldl(+, ntuple(Val(D)) do i
-    foldl(+, ntuple(j -> inner₊(Bramble._div_term(u, Val(i), Val(D)),
-        Bramble._div_term(v, Val(j), Val(D)), Val(ntuple(identity, D))), Val(D)))
-end)
+function _hand_div(u, v, ::Val{D}) where {D}
+    foldl(+,
+        ntuple(Val(D)) do i
+            foldl(+,
+                ntuple(
+                    j -> inner₊(Bramble._div_term(u, Val(i), Val(D)),
+                        Bramble._div_term(v, Val(j), Val(D)), Val(ntuple(identity, D))),
+                    Val(D)))
+        end)
+end
 
 # A coefficient captured by the form closure, over a builder's sum: `form` infers one type.
 _scaled_builder(b, c, W) = form(W, W, (u, v) -> c * inner₊(b(u), b(v)))
@@ -924,17 +930,20 @@ _wrapped_builders = ((_strain, b -> Bramble.restrict_to(:interior, 1.5 * b)),
     Ωₕ = mesh(domain(box((0.0, 0.0), (1.0, 1.0))), (7, 8))
     W = gridspace(Ωₕ)^Val(2)
     u, v = trial_function(W), test_function(W)
-    hand = Dict(_strain => (u, v) -> begin
-            a(w) = (1 // 2) * Bramble.Mₓ(D₋ᵧ(w(1)))
-            b(w) = (1 // 2) * Bramble.Mᵧ(D₋ₓ(w(2)))
-            S = Val((1, 2))
-            inner₊(D₋ₓ(u(1)), D₋ₓ(v(1)), Val((1,))) +
-            inner₊(a(u), a(v), S) + inner₊(a(u), b(v), S) +
-            inner₊(b(u), a(v), S) + inner₊(b(u), b(v), S) +
-            inner₊(b(u), b(v), S) + inner₊(b(u), a(v), S) +
-            inner₊(a(u), b(v), S) + inner₊(a(u), a(v), S) +
-            inner₊(D₋ᵧ(u(2)), D₋ᵧ(v(2)), Val((2,)))
-        end, _div => (u, v) -> _hand_div(u, v, Val(2)))
+    hand = Dict(
+        _strain =>
+            (u, v) -> begin
+                a(w) = (1 // 2) * Bramble.Mₓ(D₋ᵧ(w(1)))
+                b(w) = (1 // 2) * Bramble.Mᵧ(D₋ₓ(w(2)))
+                S = Val((1, 2))
+                inner₊(D₋ₓ(u(1)), D₋ₓ(v(1)), Val((1,))) +
+                inner₊(a(u), a(v), S) + inner₊(a(u), b(v), S) +
+                inner₊(b(u), a(v), S) + inner₊(b(u), b(v), S) +
+                inner₊(b(u), b(v), S) + inner₊(b(u), a(v), S) +
+                inner₊(a(u), b(v), S) + inner₊(a(u), a(v), S) +
+                inner₊(D₋ᵧ(u(2)), D₋ᵧ(v(2)), Val((2,)))
+            end,
+        _div => (u, v) -> _hand_div(u, v, Val(2)))
     for (build, wrap) in _wrapped_builders
         @test build(u, v) === hand[build](u, v)
         a = form(W, W, (u, v) -> wrap(build(u, v)))

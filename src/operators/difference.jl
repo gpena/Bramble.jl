@@ -1381,10 +1381,10 @@ end
 macro _second_difference_rebuild()
     return esc(
         Expr(
-            :block,
-            _node_resolve_expr(:SecondDifference; source = __source__),
-            _node_bind_expr(:SecondDifference; source = __source__)
-        )
+        :block,
+        _node_resolve_expr(:SecondDifference; source = __source__),
+        _node_bind_expr(:SecondDifference; source = __source__)
+    )
     )
 end
 

@@ -188,7 +188,9 @@ in [`_launch_restriction!`](@ref). Same GPU-compilability requirement on `f`.
 # Throws
 - `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_device_kernel`).
 """
-_launch_restriction_scatter!(mats, pts, f, dev, sel) = _throw_no_device_kernel(:projection, "_launch_restriction_scatter!")
+function _launch_restriction_scatter!(mats, pts, f, dev, sel)
+    _throw_no_device_kernel(:projection, "_launch_restriction_scatter!")
+end
 
 # The `D >= 2` counterparts: a tensor-product mesh stores one coordinate vector per axis
 # (`points(Ωₕ::MeshnD) -> NTuple{D,AbstractVector}`), so the point at Cartesian index `I`

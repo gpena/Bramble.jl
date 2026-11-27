@@ -653,8 +653,10 @@ end
 # them there.
 # The walk is `_check_walked_meshes`, shared with `_check_source_meshes` above.
 _check_centered_meshes(ast, Vₕ) = _check_centered_meshes(ast, Vₕ, Vₕ)
-_check_centered_meshes(ast, Wₕ, Vₕ) = _check_walked_meshes(
-    Base.Fix1(_each_mesh_node, _check_centered_mesh), ast, Wₕ, Vₕ)
+function _check_centered_meshes(ast, Wₕ, Vₕ)
+    _check_walked_meshes(
+        Base.Fix1(_each_mesh_node, _check_centered_mesh), ast, Wₕ, Vₕ)
+end
 
 _check_form_meshes(ast, Wₕ, Vₕ) = _check_walked_meshes(_check_term_meshes, ast, Wₕ, Vₕ)
 

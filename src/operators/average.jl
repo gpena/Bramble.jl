@@ -48,7 +48,9 @@ sweep below.
 - `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
   kernel to reach (`_throw_no_device_kernel`).
 """
-_launch_average_engine!(out, in_ref, dims, dir, dim_val, dev) = _throw_no_device_kernel(:average, "_launch_average_engine!")
+function _launch_average_engine!(out, in_ref, dims, dir, dim_val, dev)
+    _throw_no_device_kernel(:average, "_launch_average_engine!")
+end
 
 # The checks both scalar `_apply_averaged!` methods make before their engine call.
 @inline function _check_averaged(vₕ, uₕ, ::Val{DIM}) where {DIM}
