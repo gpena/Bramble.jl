@@ -348,6 +348,8 @@ using ..TestUtils: _fd
     # about two different differentiation strategies -- so this is a plain in-test timing
     # sanity check: `nθ` diagonal perturbations to a fixed `A`, one rank-1 direction each, and
     # `@elapsed` after a warm-up call per `bramble-verification`'s measurement discipline.
+    # Each time is the minimum of 5 runs: the adjoint call takes about 0.2 ms, so a single
+    # sample on a shared runner fails the ratio checks about 2% of the time (Weekly hit it).
     # The gradient costs one solve regardless of the parameter count.
     @testset "cost: one solve for any #params" begin
         n = 60
@@ -359,12 +361,15 @@ using ..TestUtils: _fd
             A = copy(A_base)
             u, pullback = rrule(Bramble.pde_solve, A, F)   # warm-up (compilation, factorisation)
             pullback(u)
-            return @elapsed begin
-                u, pullback = rrule(Bramble.pde_solve, A, F)
-                _, Ā, _ = pullback(u)
-                # ⟨Ā, ∂A/∂θₖ⟩ for every θₖ at once, from the one Ā already computed above --
-                # the actual point of the rule: no further solve, for any number of idx.
-                sum(Ā[i, i] for i in idx)
+            return minimum(1:5) do _
+                @elapsed begin
+                    local u, pullback = rrule(Bramble.pde_solve, A, F)
+                    _, Ā, _ = pullback(u)
+                    # ⟨Ā, ∂A/∂θₖ⟩ for every θₖ at once, from the one Ā already computed
+                    # above -- the actual point of the rule: no further solve, for any
+                    # number of idx.
+                    sum(Ā[i, i] for i in idx)
+                end
             end
         end
 
@@ -373,10 +378,12 @@ using ..TestUtils: _fd
             A = copy(A_base)
             h = 1e-6
             Bramble.pde_solve(A, F)   # warm-up
-            return @elapsed for i in idx
-                Aperturbed = copy(A)
-                Aperturbed[i, i] += h
-                (Bramble.pde_solve(Aperturbed, F) .- Bramble.pde_solve(A, F)) ./ h
+            return minimum(1:5) do _
+                @elapsed for i in idx
+                    Aperturbed = copy(A)
+                    Aperturbed[i, i] += h
+                    (Bramble.pde_solve(Aperturbed, F) .- Bramble.pde_solve(A, F)) ./ h
+                end
             end
         end
 
