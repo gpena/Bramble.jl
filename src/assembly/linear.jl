@@ -218,8 +218,8 @@ function _lower_sources(op::ShiftNode{D, Dim}, space) where {D, Dim}
     return inner === op.inner_op ? op : ShiftNode{D, Dim, typeof(inner)}(op.shift_amount, inner)
 end
 
-# Every other one-operand node (differences, averages, jumps) lowers its operand, as
-# `_lower_signs` does: the node reads its operand at the same points either way.
+# Every other one-operand node (scales, differences, averages, jumps) lowers its operand,
+# as `_lower_signs` does: the node reads its operand at the same points either way.
 _lower_sources(op::UnaryWrapper, space) = _rewrap_inner(op, _lower_sources(op.inner_op, space))
 
 # Two exceptions. A restricted source is called only at the points its region reaches, on
