@@ -18,7 +18,7 @@ using Bramble:
                is_uniform,
                Mesh1D,
                MeshMarkers,
-               boundary_symbol_to_dict,
+               boundary_symbol_to_cartesian,
                half_spacings,
                indices,
                cell_measure,
@@ -43,7 +43,6 @@ using Bramble:
                inner₊ᵧ,
                source_function,
                boundary_indices,
-               forward_spacings,
                half_points,
                hₘᵢₙ,
                interior_indices
@@ -75,24 +74,24 @@ using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _marker_mask, _Const, _x1
     end
 
     @testset "Helper utilities" begin
-        @testset "boundary_symbol_to_dict 2D" begin
+        @testset "boundary_symbol_to_cartesian 2D" begin
             indices = CartesianIndices((4, 5)) # N=4, M=5
-            dict = boundary_symbol_to_dict(indices)
-            @test dict[:left] == CartesianIndices((1:1, 1:5))
-            @test dict[:right] == CartesianIndices((4:4, 1:5))
-            @test dict[:bottom] == CartesianIndices((1:4, 1:1))
-            @test dict[:top] == CartesianIndices((1:4, 5:5))
+            faces = boundary_symbol_to_cartesian(indices)
+            @test faces[:left] == CartesianIndices((1:1, 1:5))
+            @test faces[:right] == CartesianIndices((4:4, 1:5))
+            @test faces[:bottom] == CartesianIndices((1:4, 1:1))
+            @test faces[:top] == CartesianIndices((1:4, 5:5))
         end
 
-        @testset "boundary_symbol_to_dict 3D" begin
+        @testset "boundary_symbol_to_cartesian 3D" begin
             indices = CartesianIndices((3, 4, 5)) # N=3, M=4, K=5
-            dict = boundary_symbol_to_dict(indices)
-            @test dict[:left] == CartesianIndices((1:3, 1:1, 1:5))
-            @test dict[:right] == CartesianIndices((1:3, 4:4, 1:5))
-            @test dict[:bottom] == CartesianIndices((1:3, 1:4, 1:1))
-            @test dict[:top] == CartesianIndices((1:3, 1:4, 5:5))
-            @test dict[:back] == CartesianIndices((1:1, 1:4, 1:5))
-            @test dict[:front] == CartesianIndices((3:3, 1:4, 1:5))
+            faces = boundary_symbol_to_cartesian(indices)
+            @test faces[:left] == CartesianIndices((1:3, 1:1, 1:5))
+            @test faces[:right] == CartesianIndices((1:3, 4:4, 1:5))
+            @test faces[:bottom] == CartesianIndices((1:3, 1:4, 1:1))
+            @test faces[:top] == CartesianIndices((1:3, 1:4, 5:5))
+            @test faces[:back] == CartesianIndices((1:1, 1:4, 1:5))
+            @test faces[:front] == CartesianIndices((3:3, 1:4, 1:5))
         end
 
         @testset "is_boundary_index 2D" begin
@@ -516,19 +515,13 @@ using ..TestUtils: WITH_3D_TESTS, WITH_SLOW_TESTS, _marker_mask, _Const, _x1
             sp_iter = Iterators.product(spacings(Ωₕ)...)
             @test length(sp_iter) == 9
 
-            # Iterators.product(forward_spacings(mesh)...)
-            fsp_iter = Iterators.product(forward_spacings(Ωₕ)...)
-            @test length(fsp_iter) == 9
-
-            # forward_spacings is an indexable vector agreeing with forward_spacing
+            # forward_spacing at the last point repeats the last cell width
             Random.seed!(559)
             Ωₕ_nu = mesh(Ω_2d, (6, 7), (false, false))
             for d in 1:2
                 p = points(Ωₕ_nu(d))
-                @test forward_spacings(Ωₕ_nu(d)) isa AbstractVector
-                @test collect(forward_spacings(Ωₕ_nu(d))) == vcat(diff(p), diff(p)[end])
-                @test all(forward_spacings(Ωₕ_nu)[d][i] == forward_spacing(Ωₕ_nu(d), i)
-                for i in eachindex(p))
+                @test [forward_spacing(Ωₕ_nu(d), i) for i in eachindex(p)] ==
+                      vcat(diff(p), diff(p)[end])
                 @test spacings(Ωₕ_nu(d)) == vcat(diff(p)[1], diff(p))
                 @test isapprox(half_spacings(Ωₕ_nu(d)),
                     vcat(diff(p)[1] / 2, (p[3:end] .- p[1:(end - 2)]) ./ 2, diff(p)[end] / 2);

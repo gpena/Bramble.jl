@@ -12,7 +12,8 @@ using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunctio
                SourceVector, SourceConstant, component, stencil_offsets, expression,
                host_points, _interp_cell_frac, _is_source_only, _same_operator_shape,
                _all_trial_interpolated, _all_test_interpolated, _has_trial_interp,
-               _has_test_interp, _bind_interp_spaces
+               _has_test_interp, _bind_interp_spaces, _has_interp, _all_interpolated, TrialSide,
+               TestSide
 
 # `interpolate_at` is the piecewise (multi)linear interpolant of a grid function, evaluable
 # at any physical point, not only at its own mesh's points. `πₕ!`/`πₕ` are the numeric
@@ -426,6 +427,24 @@ using Bramble: form, assemble, weights, Innerh, CompositeGridSpace, TrialFunctio
         @test _has_trial_interp(u + u) === false
         @test _has_test_interp(v) === false
         @test _has_test_interp(lp) === false
+
+        # the side as an argument: the four named forwarders agree with it, and a side-less
+        # operator answers by the side asked, not by a fixed one
+        @test _has_interp(TrialSide(), πₕ(u) + u) === true
+        @test _has_interp(TestSide(), πₕ(u) + u) === false
+        @test _has_interp(TestSide(), πₕ(v) + v) === true
+        @test _has_interp(TrialSide(), πₕ(v) + v) === false
+        @test _has_interp(TestSide(), innerₕ(u, πₕ(v)))
+        @test !_has_interp(TrialSide(), innerₕ(u, πₕ(v)))
+        # a bilinear product reads the left factor for columns and the right one for rows
+        @test _all_interpolated(TrialSide(), innerₕ(πₕ(u), v))
+        @test !_all_interpolated(TestSide(), innerₕ(πₕ(u), v))
+        @test _all_interpolated(TestSide(), innerₕ(u, πₕ(v)))
+        @test !_all_interpolated(TrialSide(), innerₕ(u, πₕ(v)))
+        @test _all_interpolated(TrialSide(), D₋ₓ(πₕ(u)))
+        @test !_all_interpolated(TestSide(), D₋ₓ(πₕ(u)))
+        @test @inferred(_has_interp(TrialSide(), πₕ(u) + u)) === true
+        @test @inferred(_all_interpolated(TestSide(), innerₕ(u, πₕ(v)))) === true
 
         # binding walks a tuple of terms element by element, leaving uninterpolated ones as
         # they are

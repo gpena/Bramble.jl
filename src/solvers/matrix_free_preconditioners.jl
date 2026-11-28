@@ -28,6 +28,7 @@ See also: [`JacobiPreconditioner`](@ref), [`jacobi_preconditioner`](@ref).
 abstract type AbstractMatrixFreePreconditioner{T} end
 
 Base.eltype(::Type{<:AbstractMatrixFreePreconditioner{T}}) where {T} = T
+Base.size(P::AbstractMatrixFreePreconditioner, d::Integer) = d <= 2 ? size(P)[d] : 1
 
 function Base.:\(P::AbstractMatrixFreePreconditioner{T}, x::AbstractVector) where {T}
     y = similar(x, promote_type(T, eltype(x)))
@@ -146,7 +147,7 @@ end
 
 function jacobi_preconditioner(op::MatrixFreeOperator{T}) where {T <: Number}
     n = op.nrows
-    n == op.ncols || _throw_jacobi_nonsquare(op)
+    n == op.ncols || _throw_nonsquare("jacobi_preconditioner needs a square form", op)
     d = zeros(T, n)
     _diagonal_walk!(op.policy, op.plan, DiagonalSink(d), op.form)
     mask = _mf_mask(op)
@@ -161,7 +162,7 @@ end
 
 function jacobi_preconditioner(op::GhostMatrixFreeOperator{T}) where {T <: Number}
     n = size(op, 1)
-    n == size(op, 2) || _throw_jacobi_nonsquare(op)
+    n == size(op, 2) || _throw_nonsquare("jacobi_preconditioner needs a square form", op)
     d = zeros(T, n)
     Eu, Ev = op.trial_space.Et, op.test_space.Et
     _reduced_diagonal_walk!(op.policy, d, Ev, Eu, op.padded.form)
@@ -172,22 +173,24 @@ function jacobi_preconditioner(op::GhostMatrixFreeOperator{T}) where {T <: Numbe
     return JacobiPreconditioner{T, typeof(d)}(d)
 end
 
-@noinline function _throw_jacobi_nonsquare(op)
-    throw(DimensionMismatch("jacobi_preconditioner needs a square form, got $(size(op))"))
+# The size throwers of the preconditioners and smoothers. `needs` states the requirement;
+# `lead` and `link` frame the two lengths, and `prefix` names the caller when it matters.
+@noinline function _throw_nonsquare(needs::String, op)
+    throw(DimensionMismatch("$needs, got $(size(op))"))
 end
 
-@noinline function _throw_jacobi_dimmismatch(P, x, y)
+@noinline function _throw_dimmismatch(P, x, y, lead::String, link::String, prefix::String = "")
     throw(
         DimensionMismatch(
-        "JacobiPreconditioner of size $(size(P)) cannot divide a vector of length " *
-        "$(length(x)) into one of length $(length(y))",
+        "$prefix$(nameof(typeof(P))) of size $(size(P)) $lead $(length(x)) $link $(length(y))",
     ),
     )
 end
 
 function ldiv!(y::AbstractVector, P::JacobiPreconditioner, x::AbstractVector)
     d = P.inv_diagonal
-    (length(x) == length(d) && length(y) == length(d)) || _throw_jacobi_dimmismatch(P, x, y)
+    (length(x) == length(d) && length(y) == length(d)) ||
+        _throw_dimmismatch(P, x, y, "cannot divide a vector of length", "into one of length")
     yd = _mf_data(y)
     xd = _mf_data(x)
     Base.require_one_based_indexing(yd, xd)
@@ -222,7 +225,6 @@ end
 # The factorisation's `size` and both `ldiv!` methods come from `BrambleKroneckerExt`, the
 # only place a three-argument `ldiv!` exists for `ldiv!(P, x)` to forward to.
 Base.size(P::FDMPreconditioner) = size(P.factorization)
-Base.size(P::FDMPreconditioner, i::Integer) = size(P.factorization, i)
 
 # --- The diagonal walk ------------------------------------------------------------------ #
 

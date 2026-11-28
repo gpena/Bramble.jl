@@ -76,7 +76,10 @@ function prolongate!(
     Ωf, fd, cd, policy = _gmg_transfer_setup(:prolongate!, H, l, xf, xc)
     nf = npoints(Ωf, Tuple)
     _run_bands!(policy, _gmg_inject_band!, fd, cd, nf)
-    _gmg_axis_sweeps!(policy, fd, _gmg_axis_points(Ωf), nf)
+    xs = _gmg_axis_points(Ωf)
+    for d in 1:length(xs)
+        _run_bands!(policy, _gmg_axis_band!, fd, xs[d], nf, d)
+    end
     return xf
 end
 
@@ -204,13 +207,6 @@ end
     R = _gmg_band_last(ntuple(k -> 1:1:nc[k], Val(D)), nbands, b)
     @inbounds for J in CartesianIndices(R)
         fd[lf[CartesianIndex(map(j -> 2j - 1, Tuple(J)))]] = cd[lc[J]]
-    end
-    return nothing
-end
-
-function _gmg_axis_sweeps!(policy, fd, xs::NTuple{D, Any}, nf::NTuple{D, Int}) where {D}
-    for d in 1:D
-        _run_bands!(policy, _gmg_axis_band!, fd, xs[d], nf, d)
     end
     return nothing
 end

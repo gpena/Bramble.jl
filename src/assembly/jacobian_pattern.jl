@@ -548,7 +548,7 @@ end
 function _pattern_blocks_jacobian!(
         I_vec::Vector{Int}, J_vec::Vector{Int}, term::TERM, trial_leaves, test_leaves, deps
 ) where {TERM}
-    for blk in blocks(term, trial_leaves, test_leaves)
+    _foldl_blocks(nothing, blocks(term, trial_leaves, test_leaves)) do _, blk
         bound = _bind_interp_spaces(term, blk.trial_leaf, blk.test_leaf)
         _check_block_meshes(bound, blk.trial_leaf, blk.test_leaf)
         _pattern_term_jacobian!(
@@ -562,6 +562,7 @@ function _pattern_blocks_jacobian!(
             trial_leaves,
             deps
         )
+        return nothing
     end
     return nothing
 end

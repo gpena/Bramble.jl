@@ -3,7 +3,7 @@ module SpaceJumpTests
 using Test
 using Bramble
 using Bramble: VectorElement, jumpᵧ, jump₂, jumpₓ
-import Bramble: forward_difference, jump, jump_dim!, diff₊ₓ, M₊ₓ, M₊ᵧ
+import Bramble: forward_difference, jump, diff₊ₓ, M₊ₓ, M₊ᵧ
 using LinearAlgebra: norm
 using Supposition
 using ..TestUtils: WITH_SLOW_TESTS, TEST_DIMS
@@ -19,20 +19,15 @@ using ..SpaceVectorElementsTests: setup_test_grid
             dims, Wₕ, uₕ = setup_test_grid(Val(D))
             Ωₕ = mesh(Wₕ)
 
-            vₕ = similar(uₕ)
-
             # Define a linear test function and project it onto the grid
             coeffs = (2.0, 3.0, 5.0)
             linear_func(x) = sum(coeffs[i] * x[i] for i in 1:D)
             Rₕ!(uₕ, linear_func)
 
             for i in 1:D
-                # the primary applicator, out of place, against the in-place one
+                # the primary applicator against the unscaled forward difference it
+                # forwards to
                 res_oop = jump(uₕ, Val(i))
-                jump_dim!(vₕ.data, uₕ.data, dims, Val(i))
-                @test norm(parent(res_oop) - parent(vₕ)) < 1e-14
-
-                # and against the unscaled forward difference it forwards to
                 @test norm(res_oop .- forward_difference(uₕ, Val(i))) < 1e-14
             end
 

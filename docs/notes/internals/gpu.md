@@ -27,8 +27,12 @@ derived from the array type, never declared by a caller or a policy's name:
 
 ```julia
 Bramble.locality(::Type{<:AbstractArray}) = Bramble.HostLocality()   # the fallback
-Bramble.locality(::Type{<:MtlVector}) = Bramble.DeviceLocality()     # BrambleMetalExt's addition
+Bramble.locality(::Type{<:GPUArraysCore.AbstractGPUArray}) = Bramble.DeviceLocality()
 ```
+
+`MtlVector` and `MtlMatrix` subtype `AbstractGPUArray`, so the second method covers them
+and `BrambleMetalExt` adds no vector or matrix method of its own. Only the Metal sparse
+types, which are not `AbstractGPUArray`, get one each.
 
 [`CpuPolicy`](@ref) claims [`HostLocality`](@ref); [`GpuPolicy`](@ref) claims
 [`DeviceLocality`](@ref). [`Backend`](@ref)'s inner constructor requires the vector type,
@@ -95,9 +99,11 @@ them is written against `KernelAbstractions.Backend` alone, launched as
 `ka_device(::Backend{<:CuVector, MT, EP}) where {MT, EP} = CUDABackend()` picks up the
 mesh, grid-space, difference, average and sparse SpMV/SpMM kernels with no further wiring.
 
-A backend also needs `locality` and `_gpu_functional` methods for its own storage and
-device probe (`BrambleMetalExt` supplies both, alongside `ka_device`), and typically its
-own `vector`/`matrix`/`_backend_eye`/`_backend_zeros` allocation methods and a
+A backend also needs a `_gpu_functional(::Val{name})` method for its device probe
+(`BrambleMetalExt` supplies it, alongside `ka_device`; it returns the backend's own answer
+only, `gpu_backend` handles the test override), a `locality` method for any storage type
+that is not an `AbstractGPUArray`, and typically its own
+`vector`/`matrix`/`_backend_eye`/`_backend_zeros` allocation methods and a
 `metal_backend`-style constructor -- but none of that touches the kernels themselves.
 Once `ka_device` answers for a storage type, every `@kernel` in the extension is already
 available on it.
@@ -140,8 +146,8 @@ agnosticism rule -- there is no executable reference to Metal anywhere in it. It
 - [`ka_synchronize`](@ref)'s real method, `synchronize(get_backend(x))`.
 
 `ext/BrambleMetalExt.jl` holds only what is genuinely Metal-specific: the `ka_device` and
-`locality` methods above, the Metal-side `vector`/`matrix`/`_backend_eye`/
-`_backend_zeros` allocators, the `MetalSparseMatrixCSR`/`MetalSparseMatrixCSC` types
+`_gpu_functional` methods above, the `locality` methods for the sparse types, the
+Metal-side `vector`/`matrix`/`_backend_eye`/`_backend_zeros` allocators, the `MetalSparseMatrixCSR`/`MetalSparseMatrixCSC` types
 (placeholders behind an `isdefined(Metal, :MtlSparseMatrixCSR)` alias hook, since tagged
 Metal.jl does not yet ship them -- JuliaGPU/Metal.jl#982 is open), their `mul!` methods, and
 `_allocate_from_pattern` for a Metal matrix type. None of these are `@kernel`s: they are

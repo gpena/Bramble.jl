@@ -613,12 +613,12 @@ Hp(W, d) = Diagonal(collect(weights(W, Innerplus(), d)))
             a = form(Wu, Wv, (u, v) -> innerₕ(u, πₕ(v)) + inner₊ₓ(D₋ₓ(u), D₋ₓ(πₕ(v))))
             As = assemble(a)
 
-            # the pattern reserves exactly what the trial-side twin reserves, transposed:
+            # the pattern reserves exactly what the trial-side twin reserves, transposed, so
             # binding or scattering the wrong side would show up as a different count. (Not
-            # `count(!iszero, As)`: a corner weight is legitimately zero where a point of the
-            # walked mesh falls on a node of the interpolated one, so a reserved entry may
-            # hold an exact zero. `add_to_sparse!` is what guarantees the other direction --
-            # an entry the sweep writes but the pattern did not reserve throws.)
+            # `count(!iszero, As)`, since a corner weight is legitimately zero where a point of
+            # the walked mesh falls on a node of the interpolated one, so a reserved entry may
+            # hold an exact zero. `_throw_missing_pattern_entry` guarantees the other
+            # direction: an entry the sweep writes but the pattern did not reserve throws.)
             B = assemble(form(Wv, Wu, (u, v) -> innerₕ(πₕ(u), v) + inner₊ₓ(D₋ₓ(πₕ(u)), D₋ₓ(v))))
             @test nnz(As) == nnz(B)
             @test As ≈ transpose(B)

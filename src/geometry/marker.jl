@@ -20,40 +20,27 @@ end
 Marker(label, identifier::F) where {F} = Marker{F, Nothing}(label, identifier)
 
 """
-    MarkerPair{F}
-
-Type alias for `Pair{Symbol, F}` used to specify region markers (e.g. `:boundary => :left`).
-"""
-const MarkerPair{F} = Pair{Symbol, F}
-
-"""
     label(m::Marker) -> Symbol
-    label(m::MarkerPair) -> Symbol
 
 Return the `Symbol` label of marker `m`.
 """
 @inline label(m::Marker) = m.label
-@inline label(m::MarkerPair) = first(m)
 
 """
     identifier(m::Marker{F}) -> F
-    identifier(m::MarkerPair{F}) -> F
 
 Return the identifying symbol, set of symbols, predicate function,
 polygon or level set of marker `m`.
 """
 @inline identifier(m::Marker) = m.identifier
-@inline identifier(m::MarkerPair) = last(m)
 
 """
-    DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple)
     DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple, regions::Tuple)
 
 Container categorizing and indexing boundary and interior markers for a computational domain.
 
 Every field is a statically typed tuple, so `symbols`, `tuples`, `conditions` and `regions`
-markers are each an unrolled, zero-allocation sweep to iterate. The three-argument form has
-no `regions`.
+markers are each an unrolled, zero-allocation sweep to iterate.
 
 # Fields
 - `symbols`: Tuple of markers identified by a single predefined boundary `Symbol` (e.g. `:left`).
@@ -73,10 +60,6 @@ struct DomainMarkers{ST <: Tuple, TT <: Tuple, CT <: Tuple, RT <: Tuple}
     regions::RT
 end
 
-function DomainMarkers(symbols::Tuple, tuples::Tuple, conditions::Tuple)
-    return DomainMarkers(symbols, tuples, conditions, ())
-end
-
 # The polygon and level-set markers of `domain_markers`.
 @inline regions(domain_markers::DomainMarkers) = domain_markers.regions
 
@@ -84,15 +67,18 @@ end
 # exterior nodes.
 @inline _region_marker_labels(L::Symbol) = (L, Symbol(L, :_boundary), Symbol(L, :_exterior))
 
+# Polygons and level sets give three labels each.
+const _RegionIdentifier = Union{Polygon, LevelSet}
+
 # A region marker `:L => P` (a `Polygon`) or `:L => levelset(φ)` (a `LevelSet`). Its three
 # mesh labels are built once, here, so that reading them (`labels`, `set_markers!`)
 # allocates nothing.
-struct _RegionMarker{I <: Union{Polygon, LevelSet}}
+struct _RegionMarker{I <: _RegionIdentifier}
     label::Symbol
     identifier::I
     labels::NTuple{3, Symbol}
 end
-function _RegionMarker(L::Symbol, R::Union{Polygon, LevelSet})
+function _RegionMarker(L::Symbol, R::_RegionIdentifier)
     return _RegionMarker(L, R, _region_marker_labels(L))
 end
 
@@ -228,13 +214,20 @@ function _validate_marker_pair(space_set::CartesianProduct{D}, p::Pair) where {D
     return nothing
 end
 
+# A region marker (`noun` is "a polygon" or "a level set") marks the nodes of a 2D mesh and
+# never takes a reserved label; `thrower` raises the error of its kind.
+function _check_region_marker(thrower, noun, ::CartesianProduct{D}, lbl::Symbol) where {D}
+    D == 2 || thrower(lbl, "$noun marks a 2D set, but this set is $(D)D")
+    lbl in (:boundary, :interior) && thrower(lbl,
+        ":$lbl is reserved for the mesh's own geometric markers; choose another label")
+    return nothing
+end
+
 # A polygon marks the nodes of a 2D mesh, lies in the set, and never takes a reserved label.
 function _validate_polygon_marker(
         space_set::CartesianProduct{D}, lbl::Symbol, P::Polygon
 ) where {D}
-    D == 2 || _throw_polygon_marker_error(lbl, "a polygon marks a 2D set, but this set is $(D)D")
-    lbl in (:boundary, :interior) && _throw_polygon_marker_error(lbl,
-        ":$lbl is reserved for the mesh's own geometric markers; choose another label")
+    _check_region_marker(_throw_polygon_marker_error, "a polygon", space_set, lbl)
     (a1, b1), (a2, b2) = extrema(space_set)
     for (k, v) in enumerate(P.vertices)
         (a1 <= v[1] <= b1 && a2 <= v[2] <= b2) || _throw_polygon_marker_error(lbl,
@@ -250,9 +243,7 @@ end
 function _validate_levelset_marker(
         space_set::CartesianProduct{D}, lbl::Symbol, S::LevelSet
 ) where {D}
-    D == 2 || _throw_levelset_marker_error(lbl, "a level set marks a 2D set, but this set is $(D)D")
-    lbl in (:boundary, :interior) && _throw_levelset_marker_error(lbl,
-        ":$lbl is reserved for the mesh's own geometric markers; choose another label")
+    _check_region_marker(_throw_levelset_marker_error, "a level set", space_set, lbl)
     c = _marker_probe_point(space_set)
     res = try
         S.φ(c)
@@ -279,9 +270,6 @@ _is_plain_real(x) = x isa Union{AbstractFloat, Rational, AbstractIrrational} ||
 @noinline function _throw_levelset_marker_error(lbl::Symbol, msg)
     throw(ArgumentError("Level-set marker :$lbl: " * msg * "."))
 end
-
-# Polygons and level sets give three labels each.
-const _RegionIdentifier = Union{Polygon, LevelSet}
 
 # The three labels of each polygon or level-set marker are told apart from every other
 # marker's labels.
@@ -400,7 +388,7 @@ function _create_generic_markers(pairs::Pair...)
     return DomainMarkers(symbols, tuples, conditions, regions)
 end
 
-@inline _region_marker(p::Pair{Symbol, <:Union{Polygon, LevelSet}}) = _RegionMarker(p.first, p.second)
+@inline _region_marker(p::Pair{Symbol, <:_RegionIdentifier}) = _RegionMarker(p.first, p.second)
 
 # Extract function-valued pairs into a tuple of Marker{F} instances, keeping each closure's
 # concrete type specialized for zero heap allocations during evaluation.
@@ -456,8 +444,8 @@ function conditions(edm::EvaluatedDomainMarkers)
     return map(m -> _fix_marker_time(m, t), conditions(edm.original_markers))
 end
 
-# `hasmethod` is `@nospecialize` in `f`, so called normally it folds only for a singleton `f`,
-# so a capturing closure or a callable struct with fields gives a `Union` per slot and
+# `hasmethod` is `@nospecialize` in `f`, so called normally it folds only for a singleton
+# `f`; a capturing closure or a callable struct with fields gives a `Union` per slot and
 # allocates. Inlined at the call site, its `Core._hasmethod(Tuple{F, ...})` folds on the
 # concrete type `F`. For a callback typed on every argument `_accepts` falls back to
 # `methods` (below), which cannot fold, and `_fix_time` then returns a `Union`. So
@@ -686,7 +674,6 @@ Return multi-symbol markers from the underlying domain markers.
 @inline Base.isempty(edm::_EvaluatedMarkers) = isempty(edm.original_markers)
 
 """
-    label_identifiers(markers)
     labels(markers)
 
 Return a tuple of the `Symbol` label of every marker in `markers`, a [`DomainMarkers`](@ref),
@@ -698,7 +685,7 @@ compile-time-unrolled tuple build, so this allocates 0 bytes. For the labels of 
 category alone, [`label_symbols`](@ref), [`label_tuples`](@ref), or
 [`label_conditions`](@ref) are equally zero-allocation.
 """
-@inline label_identifiers(markers::_MarkerCollection) = (
+@inline labels(markers::_MarkerCollection) = (
     map(label, symbols(markers))...,
     map(label, tuples(markers))...,
     map(label, conditions(markers))...,
@@ -709,8 +696,6 @@ category alone, [`label_symbols`](@ref), [`label_tuples`](@ref), or
 @inline function _region_mesh_labels(rs::Tuple)
     return (_region_marker_labels(first(rs))..., _region_mesh_labels(Base.tail(rs))...)
 end
-
-@inline labels(markers::_MarkerCollection) = label_identifiers(markers)
 
 """
     label_symbols(markers)
@@ -747,12 +732,9 @@ end
 _region_description(P::Polygon) = "<polygon, $(length(P.vertices)) vertices>"
 _region_description(::LevelSet) = "<levelset>"
 
-# The short form of `_region_description`, without the vertex count.
-_region_kind(::Polygon) = "<polygon>"
-_region_kind(S::LevelSet) = _region_description(S)
-
 function Base.show(io::IO, m::_RegionMarker)
-    print(io, "Marker(:$(m.label) => $(_region_kind(m.identifier)))")
+    kind = m.identifier isa Polygon ? "<polygon>" : _region_description(m.identifier)
+    print(io, "Marker(:$(m.label) => $kind)")
 end
 
 function Base.show(io::IO, dm::DomainMarkers)
@@ -807,11 +789,7 @@ function Base.show(io::IO, ::MIME"text/plain", dm::DomainMarkers)
             print_section_header(pp_indented, "Function markers ($n_cond):")
             pp_double_indent = with_indent(pp, 2)
             for m in dm.conditions
-                print_indent(pp_double_indent)
-                printstyled(io, ":$(label(m))"; color = :green)
-                print(io, " => ")
-                printstyled(io, "<function>"; color = :magenta)
-                println(io)
+                print_key_value(pp_double_indent, ":$(label(m))", "<function>"; value_color = :magenta)
             end
         end
 
@@ -821,11 +799,8 @@ function Base.show(io::IO, ::MIME"text/plain", dm::DomainMarkers)
             print_section_header(pp_indented, "$title markers ($(length(group))):")
             pp_double_indent = with_indent(pp, 2)
             for m in group
-                print_indent(pp_double_indent)
-                printstyled(io, ":$(label(m))"; color = :green)
-                print(io, " => ")
-                printstyled(io, _region_description(identifier(m)); color = :magenta)
-                println(io)
+                print_key_value(pp_double_indent, ":$(label(m))",
+                    _region_description(identifier(m)); value_color = :magenta)
             end
         end
     end

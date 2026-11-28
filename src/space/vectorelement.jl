@@ -48,33 +48,13 @@ Returns the grid space associated with [`VectorElement`](@ref) `uₕ`.
 """
 @inline space(uₕ::VectorElement) = uₕ.space
 
-"""
-    space_type(::Type{<:VectorElement}) -> Type{<:AbstractSpaceType}
-    space_type(uₕ::VectorElement) -> Type{<:AbstractSpaceType}
-
-Returns the concrete [`AbstractSpaceType`](@ref) associated with a [`VectorElement`](@ref) type or instance.
-
-# Examples
-
-```julia
-Wₕ = gridspace(Ωₕ)
-uₕ = element(Wₕ)
-space_type(typeof(uₕ)) === typeof(Wₕ)  # true
-space_type(uₕ) === typeof(Wₕ)          # true
-```
-
-See also: [`space`](@ref), [`VectorElement`](@ref)
-"""
-@inline space_type(::Type{<:VectorElement{S}}) where {S} = S
-@inline space_type(uₕ::VectorElement) = space_type(typeof(uₕ))
-
 # Forward array-like methods to the `data` field. This allows a VectorElement
 # to behave like a standard Julia vector (e.g., support `size`, `length`, `eltype`).
 #
-# `size` is defined directly, not through `@forward`: the macro's generated
-# `size(x::VectorElement, args...; kwargs...)` is as broad as `Base`'s own
-# `size(t::AbstractArray, dim)` fallback (abstractarray.jl), so inserting it invalidated
-# that fallback's cached `MethodInstance`s package-wide the moment Bramble loaded (#198).
+# `size` is defined with one argument, not as `size(x::VectorElement, args...; kwargs...)`:
+# that signature is as broad as `Base`'s own `size(t::AbstractArray, dim)` fallback
+# (abstractarray.jl), so inserting it invalidated that fallback's cached `MethodInstance`s
+# package-wide the moment Bramble loaded (#198).
 # The zero-argument method below is all `size` ever needs from `VectorElement`: `Base`'s
 # fallback already answers `size(uₕ, dim)` as `size(uₕ)[dim]` without a second definition.
 @inline Base.size(uₕ::VectorElement) = size(uₕ.data)
@@ -82,7 +62,7 @@ See also: [`space`](@ref), [`VectorElement`](@ref)
 # A VectorElement wraps a vector, so indexing is linear; without this the
 # AbstractArray default of IndexCartesian() is used.
 @inline Base.IndexStyle(::Type{<:VectorElement}) = IndexLinear()
-@forward VectorElement.space (Bramble.mesh,)
+@inline mesh(x::VectorElement, args...; kwargs...) = mesh(x.space, args...; kwargs...)
 
 # Delegates straight to the storage's own `fill!` (gpena/Bramble.jl#336) rather than
 # falling back to `AbstractArray`'s `setindex!`-per-element loop, which is scalar indexing
@@ -98,6 +78,9 @@ Fills [`VectorElement`](@ref) `uₕ` with the value `α` and returns `uₕ`.
 # Component Indexing
 # ==============================================================================
 
+# The degree-of-freedom range of the leaf space `sp` that starts after `offset` dofs.
+@inline _component_range(sp, offset) = (offset + 1):(offset + ndofs(sp))
+
 """
     component_range(Wₕ::CompositeGridSpace, i::Int) -> UnitRange{Int}
 
@@ -110,7 +93,7 @@ deeply `Wₕ` nests.
     leaves = leaf_spaces_offsets(Wₕ)
     @boundscheck (1 <= i <= length(leaves)) || throw(BoundsError(Wₕ, i))
     sp, offset = @inbounds leaves[i]
-    return (offset + 1):(offset + ndofs(sp))
+    return _component_range(sp, offset)
 end
 
 """
@@ -124,10 +107,7 @@ Returns the degree-of-freedom ranges for every **leaf** of `Wₕ`, depth-first; 
 @inline function component_ranges(Wₕ::CompositeGridSpace)
     # `map` over the compile-time tuple `leaf_spaces_offsets` returns unrolls, so the
     # result is an `NTuple` of known length.
-    return map(
-        leaves_entry -> (leaves_entry[2] + 1):(leaves_entry[2] + ndofs(leaves_entry[1])),
-        leaf_spaces_offsets(Wₕ)
-    )
+    return map(leaf -> _component_range(leaf[1], leaf[2]), leaf_spaces_offsets(Wₕ))
 end
 
 """
@@ -156,7 +136,7 @@ u_x .= 1.0
     leaves = leaf_spaces_offsets(space(uₕ))
     @boundscheck (1 <= i <= length(leaves)) || throw(BoundsError(uₕ, i))
     sp, offset = @inbounds leaves[i]
-    v_data = @views parent(uₕ)[(offset + 1):(offset + ndofs(sp))]
+    v_data = @views parent(uₕ)[_component_range(sp, offset)]
     return VectorElement(v_data, sp)
 end
 
@@ -174,7 +154,7 @@ depth-first, the same leaf a matching-index `uₕ(i)` returns, regardless of nes
 @inline function components(uₕ::VectorElement{<:CompositeGridSpace})
     raw = parent(uₕ)
     return _map_entries(leaf_spaces_offsets(space(uₕ))) do (sp, offset)
-        VectorElement(@views(raw[(offset + 1):(offset + ndofs(sp))]), sp)
+        VectorElement(@views(raw[_component_range(sp, offset)]), sp)
     end
 end
 
@@ -398,14 +378,6 @@ function Base.similar(
     vec_elem === nothing &&
         throw(ArgumentError("No VectorElement found in broadcast expression"))
     return VectorElement(similar(parent(vec_elem), ElType), space(vec_elem))
-end
-
-# Version without a specified ElType.
-function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{VectorElement}})
-    vec_elem = _find_vec_in_broadcast(bc)
-    vec_elem === nothing &&
-        throw(ArgumentError("No VectorElement found in broadcast expression"))
-    return VectorElement(similar(parent(vec_elem)), space(vec_elem))
 end
 
 """
@@ -700,12 +672,8 @@ end
 function Base.show(io::IO, ::MIME"text/plain", uₕ::VectorElement)
     return show_block(io) do io
         pp = PrettyPrinter(io)
-        printstyled(io, "VectorElement"; bold = true, color = :cyan)
-        print(io, " {")
-        printstyled(io, "$(dim(space(uₕ)))D"; color = :yellow)
-        print(io, ", ")
-        printstyled(io, "$(eltype(uₕ))"; color = :yellow)
-        println(io, "}:")
+        print_type_header(io, "VectorElement", dim(space(uₕ)), eltype(uₕ))
+        println(io, ":")
 
         pp_indented = with_indent(pp, 1)
         print_key_value(pp_indented, "Space", sprint(show, space(uₕ)); separator = ": ")

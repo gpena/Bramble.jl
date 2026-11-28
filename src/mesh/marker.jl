@@ -26,54 +26,14 @@ faces.xmin == CartesianIndices((1:1, 1:4)) && faces.ymax == CartesianIndices((1:
 true
 ```
 
-See also: [`boundary_symbol_to_dict`](@ref), [`set_markers!`](@ref).
+See also: [`set_markers!`](@ref).
 """
-@inline function boundary_symbol_to_cartesian(indices::CartesianIndices{1})
-    xmin, xmax = boundary_indices(indices)
-    return (; :xmin => xmin, :xmax => xmax, :left => xmin, :right => xmax)
-end
-
-function boundary_symbol_to_cartesian(indices::CartesianIndices{2})
-    xmin, xmax, ymin, ymax = boundary_indices(indices)
-    return (;
-        :xmin => xmin,
-        :xmax => xmax,
-        :ymin => ymin,
-        :ymax => ymax,
-        :left => xmin,
-        :right => xmax,
-        :bottom => ymin,
-        :top => ymax
-    )
-end
-
-function boundary_symbol_to_cartesian(indices::CartesianIndices{3})
-    xmin, xmax, ymin, ymax, zmin, zmax = boundary_indices(indices)
-    return (;
-        :xmin => xmin,
-        :xmax => xmax,
-        :ymin => ymin,
-        :ymax => ymax,
-        :zmin => zmin,
-        :zmax => zmax,
-        :back => xmin,
-        :front => xmax,
-        :left => ymin,
-        :right => ymax,
-        :bottom => zmin,
-        :top => zmax
-    )
-end
-
-"""
-    boundary_symbol_to_dict(indices::CartesianIndices) -> Dict{Symbol, CartesianIndices}
-
-Return a dictionary connecting the facet labels of a set to the corresponding `CartesianIndices`.
-
-See also: [`boundary_symbol_to_cartesian`](@ref).
-"""
-function boundary_symbol_to_dict(indices::CartesianIndices)
-    return Dict(pairs(boundary_symbol_to_cartesian(indices)))
+@inline function boundary_symbol_to_cartesian(indices::CartesianIndices{D}) where {D}
+    faces = _boundary_faces(Val(D))
+    bounds = boundary_indices(indices)
+    names = (map(first, faces)..., map(f -> f[2], faces)...)
+    each = map(f -> bounds[2f[3] - 2 + f[4]], faces)
+    return NamedTuple{names}((each..., each...))
 end
 
 """
@@ -124,12 +84,11 @@ function _init_mesh_markers(
     markers_mesh = MeshMarkers()
     npts = npoints(Ωₕ)
 
-    process_label_for_mesh!(npts, markers_mesh, label_symbols(domain_markers))
-    process_label_for_mesh!(npts, markers_mesh, label_tuples(domain_markers))
-    process_label_for_mesh!(npts, markers_mesh, label_conditions(domain_markers))
-    for m in regions(domain_markers)
-        process_label_for_mesh!(npts, markers_mesh, _region_marker_labels(m))
-    end
+    # The label sets differ in type: `map` over the tuple unrolls, a `for` would not.
+    region_labels = map(_region_marker_labels, regions(domain_markers))
+    label_sets = (label_symbols(domain_markers), label_tuples(domain_markers),
+        label_conditions(domain_markers), region_labels...)
+    map(labels -> process_label_for_mesh!(npts, markers_mesh, labels), label_sets)
 
     return markers_mesh
 end
@@ -449,7 +408,7 @@ function _set_markers_symbols!(mesh_markers::MeshMarkers, symbols, Ωₕ)
         if identifier isa Symbol
             idxs = boundary_lookup[identifier]
             _mark_indices!(target_marker_set, linear_indices, idxs)
-        elseif identifier isa Union{Set, Tuple}
+        elseif identifier isa Set
             for id in identifier
                 idxs = boundary_lookup[id]
                 _mark_indices!(target_marker_set, linear_indices, idxs)
@@ -664,7 +623,7 @@ function _polygon_tolerance(P::Polygon, pts::NTuple{2, AbstractVector})
     ε = T(max(eps(float(eltype(pts[1]))), eps(float(eltype(pts[2]))),
         eps(float(eltype(eltype(P.vertices))))))
     V = P.vertices
-    L = T(max(maximum(first, V) - minimum(first, V), maximum(last, V) - minimum(last, V)))
+    L = T(_polygon_extent(V))
     h = typemax(T)
     for x in pts
         for i in 2:length(x)

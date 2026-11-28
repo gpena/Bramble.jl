@@ -349,8 +349,7 @@ traversal (`visit_bilinear_stencil`, above) and into `allocate_system_matrix`:
 the first two: their `_sink_entry!` methods call `_scatter_position`/`_scatter_add!` instead of
 reading `nzval`/`rowval` directly, and the positions search that builds the replay cache
 (`_coordinates_to_positions!`) is `_scatter_position` again, so recording and replay go
-through the seam rather than around it. `add_to_sparse!` (the threaded path's per-point
-scatter) is the same two calls. `allocate_system_matrix` (`bilinear_pattern.jl`) reads
+through the seam rather than around it. `allocate_system_matrix` (`bilinear_pattern.jl`) reads
 `matrix_type(backend(test_space(form)))` and builds the matrix from the coordinates the setup
 walk collected (below), duplicates included and combined: through `_allocate_from_pattern`,
 except a serial `SparseMatrixCSC` form, which uses `_allocate_keeping` to keep `I`/`J` for the

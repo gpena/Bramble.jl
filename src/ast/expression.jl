@@ -53,7 +53,6 @@ _sign_as_int(c) = c
 # An `OperatorAdd` nested inside an `OperatorAdd`/`OperatorScale` needs parens to keep
 # precedence unambiguous; a scale or a leaf never does (its own rendering already delimits it).
 _paren_if_add(op::OperatorAdd) = "($(expression(op)))"
-_paren_if_add(op::_ComponentSum) = _paren_if_add(op.sum)  # a builder's sum (ast.jl)
 _paren_if_add(op::LazyOp) = expression(op)
 
 # --- Space leaves ------------------------------------------------------------------- #
@@ -71,9 +70,6 @@ end
 
 # No name to recover for an arbitrary vector/function coefficient -- always the placeholder.
 expression(op::GridFunctionScale) = "vₕ * $(expression(op.inner_op))"
-
-# A builder's sum (`_ComponentSum`, ast.jl) prints as the sum it holds.
-expression(op::_ComponentSum) = expression(op.sum)
 
 # --- Sum nodes ------------------------------------------------------------------------ #
 

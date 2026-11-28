@@ -179,7 +179,7 @@ end
 # and is the facet operator `∂ₙ` further down.
 
 """
-    InnerGammaNormal{M, DIM} <: AbstractInnerProduct
+    InnerGammaNormal{M, DIM} <: AbstractInnerGamma{M}
 
 The quadrature weight of the faces whose normal points along `DIM`, signed by which side of
 the axis the point sits on: `-∏_{e ≠ DIM} ĥ_e` on the `min` face, `+` on the `max` one, and
@@ -189,7 +189,7 @@ The directional counterpart of [`InnerGamma`](@ref), which lumps every incident 
 number. Both hold their labels in `mask` until `form` resolves them, once, into the face
 mask, a field as `InnerGamma`'s is.
 """
-struct InnerGammaNormal{M, DIM} <: AbstractInnerProduct
+struct InnerGammaNormal{M, DIM} <: AbstractInnerGamma{M}
     mask::M
 end
 
@@ -240,32 +240,13 @@ so nothing downstream of `form` learns a new node.
 function inner_Γ(
         F::NormalContraction{<:NTuple{D, Any}}, right::LazyOp{D}; markers = ()) where {D}
     foreach(_refuse_surface_dirac, F.terms)
-    mask = _normal_mask(Val(D), markers)
-    return _normal_terms(F.terms, right, Val(mask), Val(D))
-end
-
-# The labels, held until `form` resolves them to faces as it does `InnerGamma`'s
-# (`_resolve_surfaces`, operators/inner.jl), in the one order `_canonical_labels` gives.
-@inline function _normal_mask(::Val{D}, markers) where {D}
-    labels = _as_labels(markers)
-    isempty(labels) && _throw_no_surface_labels()
-    return _canonical_labels(_SurfaceLabels{labels})
+    mask = _label_set(markers)
+    return _expand_normal(_as_normal_sum(F), right, Val(mask), Val(D))
 end
 
 function _resolved_inner(::InnerGammaNormal{_SurfaceLabels{L}, DIM}, Ωₕ) where {L, DIM}
     mask = _surface_mask(Ωₕ, L)
     return InnerGammaNormal{typeof(mask), DIM}(mask)
-end
-_surface_labels(::Type{InnerGammaNormal{_SurfaceLabels{L}, DIM}}) where {L, DIM} = L
-
-# The sum maps over `ntuple(Val, Val(D))` so each direction, and with it each weight, is a type
-# rather than a runtime value: `ntuple(d -> ..., Val(D))` leaves `d` an `Int` the compiler
-# need not constant-fold, and a `Function` and a grid-function entry in `terms` then widen
-# the tuple to a `Union` (gpena/Bramble.jl#973, the #146 shape `skew.jl` fixes the same way).
-@inline function _normal_terms(terms, right, ::Val{MASK}, ::Val{D}) where {MASK, D}
-    return _tuple_sum(map(ntuple(Val, Val(D))) do e
-        _normal_term(InnerGammaNormal{MASK, _val(e)}(), terms[_val(e)], right)
-    end)
 end
 
 @inline _normal_term(w, left::LazyOp, right::LazyOp) = _product(w, left, right)
@@ -302,19 +283,12 @@ struct NormalComponent{DIM} <: AbstractNormalTerm end
     _check_direction_type(d)  # `η[true]` would otherwise be `η[1]` (gpena/Bramble.jl#689)
     return _normal_component(Val(Int(d)))
 end
-@inline Base.getindex(::NormalSymbol, s::Symbol) = _normal_component(Val(_normal_axis(s)))
+@inline Base.getindex(::NormalSymbol, s::Symbol) = _normal_component(Val(_dim_index(s)))
 @inline Base.iterate(::NormalSymbol, state::Int = 1) = state > 3 ? nothing : (η[state], state + 1)
 
 @inline function _normal_component(::Val{d}) where {d}
     1 <= d <= 3 || throw(BoundsError(η, d))
     return NormalComponent{d}()
-end
-
-@inline function _normal_axis(s::Symbol)
-    s === :x && return 1
-    s === :y && return 2
-    s === :z && return 3
-    throw(ArgumentError("the normal has components :x, :y and :z; got :$s"))
 end
 
 """
@@ -425,7 +399,7 @@ a = form(Wₕ, Wₕ, (u, v) -> inner_Γ(u * ηᵧ, v; markers = (:boundary,)))
 """
 function inner_Γ(t::AbstractNormalTerm, right::LazyOp{D}; markers = ()) where {D}
     foreach(p -> _refuse_surface_dirac(p.factor), _as_normal_sum(t).terms)
-    mask = _normal_mask(Val(D), markers)
+    mask = _label_set(markers)
     return _expand_normal(_as_normal_sum(t), right, Val(mask), Val(D))
 end
 
@@ -703,7 +677,7 @@ end
 @inline Base.:-(u::LazyOp{D}, F::FacetOperator{D}) where {D} = _map_facets(op -> u - op, F)
 
 """
-    InnerGammaFacet{M, DIM, SIDE, G} <: AbstractInnerProduct
+    InnerGammaFacet{M, DIM, SIDE, G} <: AbstractInnerGamma{M}
 
 The quadrature weight of one facet: the transverse measure `∏_{e ≠ DIM} ĥ_e` at the nodes of
 the facet of normal axis `DIM`, side `SIDE` (1 the minimum, 2 the maximum), when `mask`
@@ -714,7 +688,7 @@ structural reach, which no weight reads. `form` checks it on the product's opera
 skipping an axis `e ≠ DIM` that each conormal term there reads through a zero `K[DIM, e]`.
 `mask` holds the labels, then the face mask, as `InnerGamma`'s does.
 """
-struct InnerGammaFacet{M, DIM, SIDE, G} <: AbstractInnerProduct
+struct InnerGammaFacet{M, DIM, SIDE, G} <: AbstractInnerGamma{M}
     mask::M
 end
 
@@ -722,12 +696,6 @@ end
 @inline function (::Type{InnerGammaFacet{M, DIM, SIDE, G}})() where {M, DIM, SIDE, G}
     m = _mask_instance(M)
     return InnerGammaFacet{typeof(m), DIM, SIDE, G}(m)
-end
-
-# The directional and facet weights refuse a Dirac source as `InnerGamma` does
-# (`_check_surface_source`, operators/inner.jl).
-@inline function _check_surface_source(::Union{InnerGammaNormal, InnerGammaFacet}, left)
-    return _refuse_surface_dirac(left)
 end
 
 @inline function compute_weight(
@@ -745,10 +713,6 @@ function _resolved_inner(::InnerGammaFacet{_SurfaceLabels{L}, DIM, SIDE, G}, Ω�
     operands = (product.left_op, product.right_op)
     mask[DIM][SIDE] && _check_facet_reach(Ωₕ, G, DIM, SIDE, operands)
     return InnerGammaFacet{typeof(mask), DIM, SIDE, G}(mask)
-end
-function _surface_labels(
-        ::Type{InnerGammaFacet{_SurfaceLabels{L}, DIM, SIDE, G}}) where {L, DIM, SIDE, G}
-    return L
 end
 
 # The facet's own ghosts first, then, for each other axis `e` the term reads along, the
@@ -846,22 +810,21 @@ products pair the two on the same facet. `markers` is required, as for the plain
 every facet.
 """
 function inner_Γ(F::FacetOperator{D}, right::LazyOp{D}; markers = ()) where {D}
-    return _facet_inner(_normal_mask(Val(D), markers), F, right)
+    return _facet_inner(_label_set(markers), F, right)
 end
 
 function inner_Γ(left::LazyOp{D}, F::FacetOperator{D}; markers = ()) where {D}
     _refuse_surface_dirac(left)
-    return _facet_inner(_normal_mask(Val(D), markers), left, F)
+    return _facet_inner(_label_set(markers), left, F)
 end
 
 function inner_Γ(F::FacetOperator{D}, H::FacetOperator{D}; markers = ()) where {D}
-    return _facet_inner(_normal_mask(Val(D), markers), F, H)
+    return _facet_inner(_label_set(markers), F, H)
 end
 
-for S in (Function, Number, VectorElement)
-    @eval function inner_Γ(g::$S, F::FacetOperator{D}; markers = ()) where {D}
-        return _facet_inner(_normal_mask(Val(D), markers), g, F)
-    end
+function inner_Γ(
+        g::Union{Function, Number, VectorElement}, F::FacetOperator{D}; markers = ()) where {D}
+    return _facet_inner(_label_set(markers), g, F)
 end
 
 # `inner_Γ` with the labels `MASK` of `markers` as a type, which `form` resolves to a mask

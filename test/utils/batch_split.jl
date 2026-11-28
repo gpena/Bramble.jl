@@ -9,7 +9,8 @@ using Bramble
 using Bramble: restrict_to, πₕ, D₋ₓ, change_points!, indices, local_stencil,
                leaf_spaces_offsets, each_routed_leaf, Mesh1DState, MeshnDState,
                _batch_split, _batch_rebuild, _bind_walk, _foreach_unit, _summands,
-               _entry_target, add_to_sparse!
+               _test_row, _trial_column, _scatter_position, _scatter_add!,
+               _throw_missing_pattern_entry
 using SparseArrays
 using Random
 using ..TestUtils: alloc_test, WITH_3D_TESTS
@@ -54,14 +55,17 @@ function linear_units(l)
     return units
 end
 
-# The walk over one unit below `_bind_walk`: each stencil entry added into the matrix where
-# `_entry_target` puts it, searching its position.
+# The walk over one unit below `_bind_walk`: each stencil entry added into the matrix at
+# the position `_scatter_position` finds for it.
 function sweep!(A::AbstractMatrix, (sp, bound, mm), ro, co)
     lin = LinearIndices(indices(mesh(sp)))
     for I in indices(mesh(sp)), (ou, ov, w) in local_stencil(bound, sp, I, mm, lin[I])
 
-        row, col = _entry_target(lin, I, ou, ov, ro, co)
-        row == 0 || add_to_sparse!(A, row, col, w, bound)
+        row, col = _test_row(lin, I, ov), _trial_column(lin, I, ou)
+        (row == 0 || col == 0) && continue
+        pos = _scatter_position(A, row + ro, col + co)
+        pos == 0 && _throw_missing_pattern_entry(bound)
+        _scatter_add!(A, pos, w)
     end
     return A
 end
@@ -205,7 +209,7 @@ const sₕ = Rₕ(Sₕ, x -> exp(x[1]) * x[2])
         rules = Bramble.PointValue(x -> (sum(x), prod(x)))
         for W in (gridspace(Ω₁), Wₕ, (WITH_3D_TESTS ? (gridspace(Ω₃),) : ())...)
             for k in (Bramble._rule_kernel(rule, W),
-                Bramble._rule_scatter_kernel(rules, W, Val(2)))
+                Bramble._rule_kernel(rules, W))
                 @test Bramble._batch_splittable(typeof(k))
                 sk, arrays = _batch_split(k)
                 @test isbits(sk)

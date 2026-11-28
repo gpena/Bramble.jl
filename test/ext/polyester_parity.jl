@@ -56,8 +56,7 @@ const _PP_RANGES = (9:-1:1, 9:-2:1, 1:-1:2, UInt(9):-1:UInt(1), UInt(9):-2:UInt(
     @testset "_sweep_scatter_for! on $r" for r in _PP_RANGES
         c = [3.0]
         sp = gridspace(mesh(domain(interval(0.0, 1.0)), 9, true))
-        split = Bramble._rule_scatter_kernel(
-            Bramble.CellAverage(x -> (x^2, 2x), Val(2)), sp, Val(2))
+        split = Bramble._rule_kernel(Bramble.CellAverage(x -> (x^2, 2x), Val(2)), sp)
         for g in (i -> (c[1] * i, 2.0 * i), split)
             m = (fill(-1.0, 9), fill(-1.0, 9))
             s = (fill(-1.0, 9), fill(-1.0, 9))

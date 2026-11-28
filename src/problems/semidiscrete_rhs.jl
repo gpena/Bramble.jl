@@ -156,11 +156,7 @@ end
 # the first call there with its own inverse mass diagonal and pattern. Untyped, so the
 # barrier keeps it out of the typed path.
 @noinline function _rhs_twin(rhs::SemidiscretizeRHS, ::Type{T}) where {T}
-    twin = get(rhs.twins, T, nothing)
-    twin === nothing || return twin
-    twin = semidiscretize_rhs(_state_twin(rhs.sd, T))
-    rhs.twins[T] = twin
-    return twin
+    return get!(() -> semidiscretize_rhs(_state_twin(rhs.sd, T)), rhs.twins, T)
 end
 
 # The compressed-row pattern of `A` the `CpuPolyester` product walks: `rowptr[i]:rowptr[i +
@@ -177,9 +173,8 @@ end
 # row-major pattern and, as its values, the permutation into `nonzeros(A)`. Every other case
 # keeps no pattern and runs the serial column product.
 _rhs_csr(policy, reassemble, A) = nothing
-_nstored(A::SparseMatrixCSC) = Int(A.colptr[end]) - 1
 function _rhs_csr(::CpuPolyester, ::Val{false}, A::SparseMatrixCSC)
-    n = _nstored(A)
+    n = SparseArrays.nnz(A)
     P = SparseMatrixCSC(size(A)..., Vector{Int}(A.colptr), Vector{Int}(rowvals(A)[1:n]),
         collect(1:n))
     Pt = copy(transpose(P))
@@ -192,7 +187,7 @@ end
 _rhs_spmv!(du, A, ::Nothing, u) = mul!(du, A, u, -1, 1)
 # The row loop runs under `@inbounds`, so the lengths `mul!` would check are checked here.
 function _rhs_spmv!(du, A::SparseMatrixCSC, csr::_CSRPattern, u)
-    length(csr.perm) == _nstored(A) || return mul!(du, A, u, -1, 1)
+    length(csr.perm) == SparseArrays.nnz(A) || return mul!(du, A, u, -1, 1)
     (length(du) == size(A, 1) && length(u) == size(A, 2)) || _throw_rhs_dims(du, A, u)
     _late(_batch_csr_spmv!, du, csr.rowptr, csr.colval, csr.perm, nonzeros(A), u)
     return du

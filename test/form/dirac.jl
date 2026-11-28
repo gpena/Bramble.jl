@@ -388,7 +388,8 @@ _bytes(f, args...) = @allocated f(args...)
     # Tuples are the inferable spelling; a vector point normalises to the same tuple, and an
     # empty point or one whose length or kind disagrees with the first is a named error (#531)
     @testset "dirac: point spellings and checks (#531)" begin
-        @test @inferred(dirac((0.3, 0.4), 2.0)) === DiracSource{2}((0.3, 0.4), 2.0)
+        @test @inferred(dirac((0.3, 0.4), 2.0)) ===
+              DiracSource{2, NTuple{2, Float64}, Float64}((0.3, 0.4), 2.0)
         many = @inferred dirac([(0.3, 0.4), (0.7, 0.2)], [1.0, -1.0])
         @test many isa DiracSource{2, Vector{NTuple{2, Float64}}, Vector{Float64}}
         @test many.points == [(0.3, 0.4), (0.7, 0.2)]

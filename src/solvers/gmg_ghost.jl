@@ -118,28 +118,17 @@ end
 # facets the finest one has.
 _gmg_check_level_kinds(forms::AbstractVector{<:BilinearForm}) = nothing
 
-# A loop, not `all(f, forms)`: over an abstract vector JET infers the `all` of a closure as
-# `Union{Nothing, Some{Bool}, Bool}` and reports the condition (seen in the quality group alone).
-function _gmg_all_plain(forms::AbstractVector)
-    for a in forms
-        a isa BilinearForm || return false
-    end
-    return true
-end
-
 function _gmg_check_level_kinds(forms::AbstractVector)
-    last(forms) isa GhostBilinearForm || _gmg_all_plain(forms) || _throw_gmg_level_kinds()
-    if last(forms) isa GhostBilinearForm
-        active = mesh(trial_space(last(forms))).active
-        for (l, a) in enumerate(forms)
-            a isa GhostBilinearForm || _throw_gmg_level_kinds()
-            mesh(trial_space(a)).active == active || throw(
-                ArgumentError(
-                "gmg_preconditioner: build(W) has ghosts on other facets on level $l " *
-                "than on the finest level: every level needs the same ghosted facets",
-            ),
-            )
-        end
+    last(forms) isa GhostBilinearForm || _throw_gmg_level_kinds()
+    active = mesh(trial_space(last(forms))).active
+    for (l, a) in enumerate(forms)
+        a isa GhostBilinearForm || _throw_gmg_level_kinds()
+        mesh(trial_space(a)).active == active || throw(
+            ArgumentError(
+            "gmg_preconditioner: build(W) has ghosts on other facets on level $l " *
+            "than on the finest level: every level needs the same ghosted facets",
+        ),
+        )
     end
     return nothing
 end

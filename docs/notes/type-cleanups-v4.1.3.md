@@ -214,7 +214,7 @@ Question: does restoring the stored `indices` field remove the `ghost_2d` `mul!`
 that the bisect put on S2? Candidate A puts the stored `indices` field back into
 `GhostMesh` and `GhostMeshState`, without bringing back the `CI` parameter. The public type
 stays `GhostMesh{D, M, P}`. The field is typed
-`CartesianIndices{D, NTuple{D, Base.OneTo{Int}}}`, the type `generate_indices` gives every
+`CartesianIndices{D, NTuple{D, Base.OneTo{Int}}}`, the type `CartesianIndices` gives every
 padded mesh. The constructor stores the padded indices, `_walk_mesh` copies them into the
 state, `indices(G::_GhostMeshLike) = G.indices` again, and `npoints`, `_padded_markers` and
 `_ensure_geometric_markers!` read `size(G.indices)`. Only `src/mesh/ghost_mesh.jl`

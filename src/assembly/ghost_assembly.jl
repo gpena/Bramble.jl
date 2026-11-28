@@ -804,25 +804,17 @@ end
     return rows.facets[2(d - 1) + s]
 end
 
-# The check of `matrix_free_operator`, which applies `E_vᵀ A_pad E_u`: it refuses a form
-# reading a conflict node of its trial space in a tested row, whose substitution per reading
-# equation is in the reduction map alone.
-function _check_rows(a::GhostBilinearForm, labels)
-    _reads_conflict(a) && _throw_polygon_conflict("the matrix-free operator")
-    return _check_rows(a.rows, (a.test_space, a.trial_space), labels)
-end
-
 # Whether `a` reads, in a tested row, a conflict node of its polygon trial space, as `form`
 # found it; the matrix-free operator and the contraction `a(u, v)` (ghost_contract.jl)
 # refuse such a form.
 _reads_conflict(a::GhostCompositeBilinearForm) = a.reads_conflict
 _reads_conflict(a::GhostBilinearForm) = a.rows.reads_conflict
-_check_rows(l::GhostLinearForm, labels) = _check_rows(l.rows, (l.test_space,), labels)
 # With the `dirichlet_components` of the call: a scalar space validates them with its rows
 # (`_form_rows!`), a composite one reads them here (ghost_composite.jl).
 _check_rows(a::GhostBilinearForm, labels, components) = _check_rows(
     a.rows, (a.test_space, a.trial_space), labels)
-_check_rows(l::GhostLinearForm, labels, components) = _check_rows(l, labels)
+_check_rows(l::GhostLinearForm, labels, components) = _check_rows(
+    l.rows, (l.test_space,), labels)
 
 @noinline function _throw_polygon_conflict(what::String)
     throw(

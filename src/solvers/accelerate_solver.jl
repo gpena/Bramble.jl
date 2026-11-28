@@ -87,9 +87,7 @@ u = fact \\ F
 See also [`accelerate_solve`](@ref), [`accelerate_refactor!`](@ref), [`pde_solve`](@ref), [`assemble`](@ref).
 """
 function accelerate_factorize(A::SparseMatrixCSC; kwargs...)
-    if !Sys.isapple()
-        throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
-    end
+    _require_macos()
     return _accelerate_factorize(A; kwargs...)
 end
 
@@ -97,14 +95,11 @@ function accelerate_factorize(
         a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing,
         sym = :auto, kind = :auto, kwargs...
 )
-    if !Sys.isapple()
-        throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
-    end
+    _require_macos()
     _reject_factorize_symmetrize(:accelerate_factorize, kwargs)
-    A = assemble(
+    A = _assembled_csc(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
-    A = _as_csc(A)
     return _accelerate_factorize(A; sym = sym, kind = kind, kwargs...)
 end
 
@@ -137,19 +132,20 @@ vocabulary as the sparse methods above.
 See also [`accelerate_solve`](@ref).
 """
 function accelerate_factorize(A::AbstractMatrix; sym = :auto, kind = :auto)
-    if kind === :cholesky || sym === :spd || sym === :definite || sym == 1
+    s = _normalize_sym(sym)
+    if kind === :cholesky || s === :spd
         return cholesky(A)
-    elseif kind === :lu || sym === :unsymmetric || sym == 0
+    elseif kind === :lu || s === :unsymmetric
         return lu(A)
     elseif kind === :qr
         return qr(A)
-    elseif kind === :ldlt || sym === :symmetric || sym == 2
+    elseif kind === :ldlt || s === :symmetric
         throw(
             ArgumentError(
             "accelerate_factorize does not wrap dense symmetric indefinite factorization; call LinearAlgebra.bunchkaufman(A) directly.",
         ),
         )
-    elseif (sym === :auto || sym === nothing) && (kind === :auto || kind === nothing)
+    elseif s === :auto && (kind === :auto || kind === nothing)
         return issymmetric(A) && isposdef(A) ? cholesky(A) : lu(A)
     else
         throw(ArgumentError("Unknown factorization option for accelerate_factorize: sym=$sym, kind=$kind."))
@@ -176,9 +172,7 @@ call `using AppleAccelerate` before calling this function.
 See also [`accelerate_factorize`](@ref), [`refactor!`](@ref), [`pde_solve`](@ref).
 """
 function accelerate_solve(A::SparseMatrixCSC, F::AbstractVector; kwargs...)
-    if !Sys.isapple()
-        throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
-    end
+    _require_macos()
     return _accelerate_solve(A, F; kwargs...)
 end
 
@@ -186,13 +180,10 @@ function accelerate_solve(
         a::BilinearForm, l::LinearForm; dirichlet = nothing, dirichlet_components = nothing,
         symmetrize::Bool = false, sym = :auto, kind = :auto, kwargs...
 )
-    if !Sys.isapple()
-        throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
-    end
-    A, F = assemble(
+    _require_macos()
+    A, F = _assembled_csc(
         a, l; dirichlet = dirichlet, dirichlet_components = dirichlet_components, symmetrize = symmetrize
     )
-    A = _as_csc(A)
     u = _accelerate_solve(A, F; sym = sym, kind = kind, kwargs...)
     return element(trial_space(a), u)
 end
@@ -220,25 +211,14 @@ See also [`refactor!`](@ref), [`accelerate_factorize`](@ref).
 function accelerate_refactor! end
 
 function _accelerate_factorize(A; kwargs...)
-    _ext_loaded(:BrambleAppleAccelerateExt) && _throw_unsupported_matrix("accelerate_factorize", A)
-    return error(
-        "accelerate_factorize requires AppleAccelerate.jl. Add `using AppleAccelerate` before calling this function.",
-    )
+    return _ext_fallback(:BrambleAppleAccelerateExt, "accelerate_factorize", A)
 end
 
 function _accelerate_solve(A, ::Any; kwargs...)
-    _ext_loaded(:BrambleAppleAccelerateExt) && _throw_unsupported_matrix("accelerate_solve", A)
-    return error(
-        "accelerate_solve requires AppleAccelerate.jl. Add `using AppleAccelerate` before calling this function.",
-    )
+    return _ext_fallback(:BrambleAppleAccelerateExt, "accelerate_solve", A)
 end
 
 function accelerate_refactor!(::AccelerateFactorization, A)
-    if !Sys.isapple()
-        throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
-    end
-    _ext_loaded(:BrambleAppleAccelerateExt) && _throw_unsupported_matrix("accelerate_refactor!", A)
-    return error(
-        "accelerate_refactor! requires AppleAccelerate.jl. Add `using AppleAccelerate` before calling this function.",
-    )
+    _require_macos()
+    return _ext_fallback(:BrambleAppleAccelerateExt, "accelerate_refactor!", A)
 end

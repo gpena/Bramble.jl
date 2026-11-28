@@ -135,11 +135,11 @@ function _levelset_centre(φ, box)
 end
 
 """
-    _levelset_class(φ, box) -> (path = :closure | :orbit, ρ)
+    _levelset_class(φ, box) -> (path = :closure | :orbit, ρ, c)
 
 Classify the curve `φ = 0` inside `box = ((x₀, x₁), (y₀, y₁))` for a Ferreira and
 Grigorieff grid and return its path with the rotation number `ρ` of the crossing map
-`T = σₕ∘σᵥ`:
+`T = σₕ∘σᵥ`, and the centre `c` it sampled, the minimum of `φ` on the box:
 
   - `:closure` when `T^q = id` for some `q ≤ 4`, or for the `q ≤ 60` of a rotation number
     `p/q` found below (any curve with one grid-aligned symmetry axis has `T² = id`);
@@ -186,7 +186,7 @@ function _levelset_class(φ, box)
     # Finite order: T^q = id at 9 points, q ≤ 4.
     pts = [_levelset_ray(φ, B, c, 0.3 + 2π * (k - 1) / 9) for k in 1:9]
     for q in 1:4
-        _levelset_periodic(φ, B, pts, q, tol) && return (path = :closure, ρ = _levelset_ρq(φ, B, c, pts[1], q))
+        _levelset_periodic(φ, B, pts, q, tol) && return (path = :closure, ρ = _levelset_ρq(φ, B, c, pts[1], q), c)
     end
 
     # Weighted Birkhoff rotation number (Das, Sander and Yorke), weights exp(-1/(t(1-t))), on
@@ -213,10 +213,10 @@ function _levelset_class(φ, box)
     abs(ρ₁ - ρ₂) > 1e-10 && _throw_levelset_nearly_locked(ρ₂)
     for q in 1:60
         abs(q * ρ₂ - round(q * ρ₂)) < 1e-10 || continue
-        _levelset_periodic(φ, B, pts, q, tol) && return (path = :closure, ρ = _levelset_ρq(φ, B, c, pts[1], q))
+        _levelset_periodic(φ, B, pts, q, tol) && return (path = :closure, ρ = _levelset_ρq(φ, B, c, pts[1], q), c)
         _throw_levelset_locked(round(Int, q * ρ₂), q)   # q is the smallest, so p/q is reduced
     end
-    return (path = :orbit, ρ = ρ₂)
+    return (path = :orbit, ρ = ρ₂, c)
 end
 
 # The rotation number p/q of a T of order q, from the angle T turns p through in q steps.

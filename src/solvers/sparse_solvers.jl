@@ -112,42 +112,19 @@ function sparse_factorize(
         dirichlet = nothing, dirichlet_components = nothing, kwargs...
 )
     _reject_factorize_symmetrize(:sparse_factorize, kwargs)
-    A = assemble(
+    A = _assembled_csc(
         a; dirichlet = dirichlet, dirichlet_components = dirichlet_components
     )
-    A = _as_csc(A)
     return sparse_factorize(A; solver = solver, sym = sym, kwargs...)
 end
 
-# `SparseMatricesCSR` is a weakdep, so `SparseMatrixCSR` cannot be named in `src/`: `_is_csr`
-# asks whether `BrambleSparseMatricesCSRExt` is loaded and whether `A` is an instance of the type
-# that extension bound. No backend solves a CSR matrix natively
-# (`docs/src/internals/csr_solvers.md`), so a CSR `A` is converted to CSC in O(nnz) and the CSC
-# methods take it from there.
-_csr_extension() = Base.get_extension(Bramble, :BrambleSparseMatricesCSRExt)
-
-function _is_csr(A)
-    ext = _csr_extension()
-    return ext !== nothing && A isa ext.SparseMatrixCSR
-end
-
-function _csr_to_csc(A::AbstractMatrix)
-    m, n = size(A)
-    rowptr, colval, nzval = A.rowptr, A.colval, A.nzval
-    # a zero-based `sparsecsr(Val(0), ...)` stores `rowptr` and `colval` from 0: read the
-    # base off the data and shift both to one-based (`o == 0` for the usual one-based case)
-    o = 1 - Int(rowptr[1])
-    I = Vector{Int}(undef, length(nzval))
-    @inbounds for i in 1:m, k in (rowptr[i] + o):(rowptr[i + 1] + o - 1)
-
-        I[k] = i
-    end
-    return sparse(I, o == 0 ? colval : colval .+ o, nzval, m, n)
-end
-
 # The assembled matrix of a `BilinearForm` is CSR on a `csr_backend()` mesh, and no backend
-# solver takes one (`qr` would silently densify it): the form methods pass it through here.
-_as_csc(A) = _is_csr(A) ? _csr_to_csc(A) : A
+# solver takes one (`qr` would silently densify it): the form methods pass it through
+# `_as_csc`. `SparseMatricesCSR` is a weakdep, so `BrambleSparseMatricesCSRExt` adds the
+# `SparseMatrixCSR` methods of `_as_csc`, `sparse_factorize`, `refactor!` and `pde_solve`:
+# an O(nnz) conversion to CSC, after which the CSC methods take over
+# (`docs/src/internals/csr_solvers.md`).
+_as_csc(A) = A
 
 # A dense-backed form assembles into a `Matrix`, which no backend takes either. The scan is
 # O(n²), once per solve, on a matrix whose assembly is already O(n²).
@@ -158,16 +135,80 @@ _as_csc(A::Matrix) = sparse(A)
 # methods do not take (a `Diagonal`, say) gets this error naming the type instead.
 _ext_loaded(ext::Symbol) = Base.get_extension(Bramble, ext) !== nothing
 
-function _throw_unsupported_matrix(name::String, A, expected::String = "a SparseMatrixCSC")
-    throw(ArgumentError("$name takes $expected; got a $(typeof(A))."))
+# The form methods of every backend assemble, then convert the matrix with `_as_csc`. With a
+# load, the pair `(A, F)` comes back and only `A` is converted.
+_assembled_csc(a; kwargs...) = _as_csc(assemble(a; kwargs...))
+
+function _assembled_csc(a, l; kwargs...)
+    A, F = assemble(a, l; kwargs...)
+    return _as_csc(A), F
 end
 
-# Only a `SparseMatrixCSC` is supported (test/solvers/sparse_solvers.jl keeps the `MethodError`).
-# This method states that, and converts a CSR matrix and delegates back, so every
-# `AbstractMatrix` argument ends at a `SparseMatrixCSC` method or a `MethodError`.
-function sparse_factorize(A::AbstractMatrix; kwargs...)
-    _is_csr(A) && return sparse_factorize(_csr_to_csc(A); kwargs...)
-    throw(MethodError(sparse_factorize, (A,)))
+# The length check the four extensions make in their solves. `what` names the vector in the message: the
+# right-hand side of `ldiv!(x, fact, b)` and `fact \ b`, the output vector, or the single
+# vector of the in-place `ldiv!(fact, b)`.
+function _check_rhs(b::AbstractVector, n::Integer, what::AbstractString = "Right-hand side length")
+    length(b) == n || throw(
+        DimensionMismatch("$what $(length(b)) does not match matrix dimension $n"),
+    )
+    return nothing
+end
+
+# The size check every `X_refactor!` makes before it touches the factors.
+function _check_refactor_size(A::AbstractMatrix, dim::Integer)
+    m, n = size(A)
+    (m == dim && n == dim) || throw(
+        DimensionMismatch("Matrix size $(m)×$(n) does not match factorization dimension $dim"),
+    )
+    return nothing
+end
+
+# What a solve entry does with its factorization once `fact \ F` returns. MUMPS frees its
+# instance here (`BrambleMUMPSExt`); the rest leave it to the garbage collector.
+_release!(fact) = nothing
+
+# The body of `X_solve(A, F)` for the backends that factor `A` as given: factor, solve,
+# release. `factorize` is the backend's `_X_factorize`, and `kwargs` go to it. `@noinline`
+# keeps the `try` out of the callers (JuliaLang/julia#64996).
+@noinline function _form_solve(factorize::F, A, rhs; kwargs...) where {F}
+    fact = factorize(A; kwargs...)
+    try
+        return fact \ rhs
+    finally
+        _release!(fact)
+    end
+end
+
+# One reading of the `sym` vocabulary shared by the backends: `:spd`, `:symmetric`,
+# `:unsymmetric` or `:auto` for the accepted spellings (`nothing` is `:auto`, the integers
+# 1, 2 and 0 the first three), `:unknown` otherwise. Each backend keeps its own error text
+# for `:unknown` and its own rule for `:auto`.
+function _normalize_sym(sym)
+    (sym === :spd || sym === :definite || sym == 1) && return :spd
+    (sym === :symmetric || sym == 2) && return :symmetric
+    (sym === :unsymmetric || sym == 0) && return :unsymmetric
+    (sym === :auto || sym === nothing) && return :auto
+    return :unknown
+end
+
+# The `!Sys.isapple()` refusal of the Accelerate entry points.
+function _require_macos()
+    Sys.isapple() || throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))
+    return nothing
+end
+
+# The body of the 16 stubs a backend or preconditioner keeps for its extension. With the
+# extension loaded, an argument its methods do not take lands here, and the error names the
+# type. Without it, the error names the package to load. `ext` is the extension module name
+# (`:BrambleSparspakExt`), from which the package name follows.
+function _ext_fallback(ext::Symbol, name::AbstractString, A, expected::AbstractString = "a SparseMatrixCSC")
+    _ext_loaded(ext) && _throw_unsupported_matrix(name, A, expected)
+    pkg = String(ext)[(length("Bramble") + 1):(end - length("Ext"))]
+    return error("$name requires $pkg.jl. Add `using $pkg` before calling this function.")
+end
+
+function _throw_unsupported_matrix(name::String, A, expected::String = "a SparseMatrixCSC")
+    throw(ArgumentError("$name takes $expected; got a $(typeof(A))."))
 end
 
 """
@@ -226,12 +267,11 @@ end
 function refactor!(
         fact::Factorization, a::BilinearForm; dirichlet = nothing, dirichlet_components = nothing
 )
-    A = _as_csc(assemble(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components))
+    A = _assembled_csc(a; dirichlet = dirichlet, dirichlet_components = dirichlet_components)
     return refactor!(fact, A)
 end
 
 function refactor!(fact::Factorization, A::Any)
-    _is_csr(A) && return refactor!(fact, _csr_to_csc(A))
     throw(
         ArgumentError(
         "refactor! is not supported for factorization of type $(typeof(fact)) and matrix type $(typeof(A)). Expected SparseMatrixCSC.",

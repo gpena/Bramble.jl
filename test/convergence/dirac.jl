@@ -6,7 +6,7 @@ module ConvergenceDiracTests
 
 using Test
 using Bramble
-using Bramble: dirac, interpolate_at, points, stepsize
+using Bramble: dirac, interpolate_at, points
 
 @testset "1D contraction" begin
     strength = 2.5
@@ -17,7 +17,7 @@ using Bramble: dirac, interpolate_at, points, stepsize
         Ω_ref = mesh(domain(interval(0.0, 1.0)), N, true)
         W_ref = gridspace(Ω_ref)
         # Sample point at cell center (t = 0.5) for clean asymptotic scaling
-        x_mid = points(Ω_ref)[length(points(Ω_ref)) ÷ 3] + 0.5 * stepsize(Ω_ref)
+        x_mid = points(Ω_ref)[length(points(Ω_ref)) ÷ 3] + 0.5 * spacing(Ω_ref, 2)
         l_r = form(W_ref, v -> innerₕ(dirac(x_mid, strength), v))
         phi_r = Rₕ(W_ref, phi)
         push!(errors, abs(l_r(phi_r) - strength * phi((x_mid,))))

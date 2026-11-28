@@ -733,15 +733,6 @@ end
 # index.
 #------------------------------------------------------------------------------------------#
 
-@noinline function _throw_no_ka_stencil_kernel(fname::String)
-    return error(
-        "$fname requires KernelAbstractions.jl to apply a difference operator to a " *
-        "device-backed VectorElement. Add `using KernelAbstractions` (and the package " *
-        "providing this backend's device, e.g. `using Metal`) before calling it on this " *
-        "backend.",
-    )
-end
-
 # Deliberately untyped, matching the `_launch_restriction!`/`_launch_half_points!`
 # fallback idiom (`operators/restriction.jl`, `src/mesh/mesh1d.jl`): the extension's
 # methods are typed on `AbstractVector`/`Tuple`, and a fallback with the same signature
@@ -758,12 +749,10 @@ one boundary slice with no neighbour to zero, matching `_compute_difference`'s
 
 # Throws
 - `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
-  kernel to reach (`_throw_no_ka_stencil_kernel`).
+  kernel to reach (`_throw_no_device_kernel`).
 """
 function _launch_difference_onesided!(out, in_ref, h, dims, dir, dim_val, dev)
-    _throw_no_ka_stencil_kernel(
-        "_launch_difference_onesided!"
-    )
+    _throw_no_device_kernel(:difference, "_launch_difference_onesided!")
 end
 
 """
@@ -777,12 +766,10 @@ one-sided difference the near side still defines for `CrossWeighted`. Runs via a
 of `_difference_engine!`'s CPU sweep above.
 
 # Throws
-- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_stencil_kernel`).
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_device_kernel`).
 """
 function _launch_difference_centered!(out, in_ref, h, dims, dir, dim_val, dev)
-    _throw_no_ka_stencil_kernel(
-        "_launch_difference_centered!"
-    )
+    _throw_no_device_kernel(:difference, "_launch_difference_centered!")
 end
 
 # One-sided (`Forward`/`Backward`) and centered (`Centered`/`CrossWeighted`) stencils reach
@@ -794,61 +781,10 @@ end
     return _launch_difference_centered!(out, in_ref, h, dims, dir, dim_val, dev)
 end
 
-function difference_shift(
-        Ωₕ::AbstractMeshType, ::Val{DIFF_DIM}, ::Val{first}, ::Val{second}
-) where {DIFF_DIM, first, second}
-    return shift(Ωₕ, Val(DIFF_DIM), Val(first)) - shift(Ωₕ, Val(DIFF_DIM), Val(second))
-end
-
-function _difference_operator(
-        Ωₕ::AbstractMeshType, ::Forward, ::Val{DIFF_DIM}
-) where {DIFF_DIM}
-    return difference_shift(Ωₕ, Val(DIFF_DIM), Val(1), Val(0))
-end
-
-function _difference_operator(
-        Ωₕ::AbstractMeshType, ::Backward, ::Val{DIFF_DIM}
-) where {DIFF_DIM}
-    return difference_shift(Ωₕ, Val(DIFF_DIM), Val(0), Val(-1))
-end
-
-# `spacing_func::F` is a type parameter so the per-point call specialises; untyped, every
-# grid point pays a dynamic dispatch.
-#
-# It is the per-index function rather than the mesh's cached spacing vector on purpose.
-# The vector's truncated entry is not meaningful, whereas `spacing_for_derivative` returns
-# zero there, and this loop covers every index and turns that zero into a zero weight. The
-# engines can use the vector because they visit the truncated slice separately.
-function _derivative_weights!(
-        v::AbstractVector, Ωₕ::AbstractMeshType, spacing_func::F, ::Val{DIFF_DIM}
-) where {F, DIFF_DIM}
-    dims = npoints(Ωₕ, Tuple)
-
-    _check_stencil_dim(DIFF_DIM, dim(Ωₕ))
-
-    sub = Ωₕ(DIFF_DIM)
-    li = LinearIndices(dims)
-
-    @inbounds @simd for I in CartesianIndices(dims)
-        x = spacing_func(sub, I[DIFF_DIM])
-        v[li[I]] = iszero(x) ? zero(eltype(v)) : inv(x)
-    end
-    return nothing
-end
-
 const _DIFFERENCE_OP_CONFIGS = (
     (
-        direction = Forward(),
         diff_name = :forward_difference,
         finite_diff_name = :forward_finite_difference,
-        (weights_func!) = :forward_derivative_weights!,
-        spacing_func = :forward_spacing_for_derivative,
-        spacings_func = :forward_spacings_for_derivative,
-        diff_alias = :diff₊,
-        finite_diff_alias = :D₊,
-        grad_alias = :diff₊ₕ,
-        finite_grad_alias = :∇₊ₕ,
-        dir_string = "Forward",
         dir_string_lowercase = "forward",
         math_op = "u_{i+1} - u_i",
         math_finite_op = "\\frac{u_{i+1} - u_i}{h_i}",
@@ -856,17 +792,8 @@ const _DIFFERENCE_OP_CONFIGS = (
         finite_stencil_op = :ForwardFiniteDiffOp
     ),
     (
-        direction = Backward(),
         diff_name = :backward_difference,
         finite_diff_name = :backward_finite_difference,
-        (weights_func!) = :backward_derivative_weights!,
-        spacing_func = :spacing_for_derivative,
-        spacings_func = :backward_spacings_for_derivative,
-        diff_alias = :diff₋,
-        finite_diff_alias = :D₋,
-        grad_alias = :diff₋ₕ,
-        finite_grad_alias = :∇ₕ,
-        dir_string = "Backward",
         dir_string_lowercase = "backward",
         math_op = "u_{i} - u_{i-1}",
         math_finite_op = "\\frac{u_{i} - u_{i-1}}{h_i}",
@@ -876,17 +803,8 @@ const _DIFFERENCE_OP_CONFIGS = (
 )
 
 for config in _DIFFERENCE_OP_CONFIGS
-    dir_instance = config.direction
     diff_name = config.diff_name
     finite_diff_name = config.finite_diff_name
-    weights_func! = config.weights_func!
-    spacing_func = config.spacing_func
-    spacings_func = config.spacings_func
-    diff_alias = config.diff_alias
-    finite_diff_alias = config.finite_diff_alias
-    grad_alias = config.grad_alias
-    finite_grad_alias = config.finite_grad_alias
-    dir_string = config.dir_string
     dir_string_lowercase = config.dir_string_lowercase
     math_op = config.math_op
     math_finite_op = config.math_finite_op
@@ -894,53 +812,6 @@ for config in _DIFFERENCE_OP_CONFIGS
     finite_stencil_op = config.finite_stencil_op
 
     @eval begin
-        # --- In-place applicators ---
-        @doc """
-            $($(QuoteNode(Symbol(diff_name, :_dim!))))(out, in, [h], dims, diff_dim)
-
-        In-place $($dir_string_lowercase) difference of `in` along `diff_dim`, written into `out`: ``$($math_op)``, divided by `h` when it is given (the finite difference) and unscaled without it.
-        """
-        function $(Symbol(diff_name, :_dim!))(
-                out, in, h, dims::NTuple{D, Int}, diff_dim::Val{DIFF_DIM}
-        ) where {D, DIFF_DIM}
-            _check_stencil_dim(DIFF_DIM, D)
-            length(out) == length(in) == prod(dims) ||
-                _throw_stencil_size_error(length(out), length(in), dims)
-            in_ref = (out === in) ? copy(in) : in
-            _difference_engine!(out, in_ref, h, dims, $dir_instance, diff_dim)
-            return nothing
-        end
-
-        function $(Symbol(diff_name, :_dim!))(
-                out, in, dims::NTuple{D, Int}, diff_dim::Val{DIFF_DIM}
-        ) where {D, DIFF_DIM}
-            return $(Symbol(diff_name, :_dim!))(out, in, nothing, dims, diff_dim)
-        end
-
-        # --- Weight calculation function ---
-        @doc """
-            $($(QuoteNode(weights_func!)))(v::AbstractVector, Ωₕ::AbstractMeshType, diff_dim::Val)
-
-        Computes the geometric weights for the $($dir_string_lowercase) finite difference operator and stores them in-place in vector `v`.
-        """
-        @inline function $weights_func!(
-                v::AbstractVector, Ωₕ::AbstractMeshType, diff_dim::Val
-        )
-            _derivative_weights!(v, Ωₕ, $spacing_func, diff_dim)
-        end
-
-        # Kronecker oracle (gpena/Bramble.jl#185): an independent construction that
-        # `stencil_matrix` is checked against.
-        @inline $(Symbol(:_kron_, diff_name))(Ωₕ::AbstractMeshType, dim_val::Val) = _difference_operator(Ωₕ, $dir_instance, dim_val)
-
-        function $(Symbol(:_kron_, finite_diff_name))(
-                Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ)
-        )
-            diff_matrix = $(Symbol(:_kron_, diff_name))(Ωₕ, dim_val)
-            $weights_func!(vector_cache, Ωₕ, dim_val)
-            return _scale_rows!(diff_matrix, vector_cache)
-        end
-
         # --- Matrix operator functions (single-pass, gpena/Bramble.jl#185) ---
         @doc """
             $($(QuoteNode(diff_name)))(arg, dim_val::Val)
@@ -1165,59 +1036,9 @@ end
 # every one of their docstrings, and it left the form layer's nodes for them with nothing
 # to be checked against.
 #
-# Each is a diagonal scaling of unscaled difference matrices this file already builds, so
-# none needs a new traversal:
-#
-#     D̃ = diag(2/(hᵢ + hᵢ₊₁))                  · (shift₊₁ - shift₀)
-#     Dc     = diag(1/(hᵢ + hᵢ₊₁))                  · (shift₊₁ - shift₋₁)
-#     D̽ₕ     = diag(hᵢ/((hᵢ+hᵢ₊₁)hᵢ₊₁))             · diff₊
-#            + diag(hᵢ₊₁/((hᵢ+hᵢ₊₁)hᵢ))             · diff₋
-#
-# The cross-weighted one falls out of its own definition: it is D₋ at xᵢ₊₁ weighted by hᵢ
-# and D₋ at xᵢ weighted by hᵢ₊₁, over their sum, and D₋(u)ᵢ₊₁ is diff₊(u)ᵢ/hᵢ₊₁ while
-# D₋(u)ᵢ is diff₋(u)ᵢ/hᵢ. So the two weights above are what is left after dividing through.
-#
-# The weights read the mesh's cached `spacings` rather than `spacing_for_derivative`. The
-# cached vector repeats the first interval in h₁ instead of zeroing it, and that repeated
-# value is the one the grid-function kernels use, so reading it is what makes the matrix
-# agree with them at the first point. Truncation is applied by index here instead, which
-# is also what the form layer's stencils do.
-
-# Returns `w`, as a mutating function with a single destination does, so that the builders
-# below can write `_scale_rows!(matrix, _extended_weights!(cache, …))` rather than filling
-# the cache on one line and reaching for it on the next.
-@inline function _extended_weights!(
-        w::AbstractVector, Ωₕ::AbstractMeshType, ::Val{DIFF_DIM}, weight::F
-) where {F, DIFF_DIM}
-    _check_stencil_dim(DIFF_DIM, dim(Ωₕ))
-
-    dims = npoints(Ωₕ, Tuple)
-    h = spacings(Ωₕ(DIFF_DIM))
-    n = dims[DIFF_DIM]
-    li = LinearIndices(dims)
-
-    @inbounds for I in CartesianIndices(dims)
-        w[li[I]] = weight(h, I[DIFF_DIM], n)
-    end
-    return w
-end
-
-# `_star_weight`/`_centered_weight` return zero wherever their stencil would need a
-# neighbour the grid does not have, truncating that slice of the matrix to a zero row.
-@inline _star_weight(h, i, n) = i == n ? zero(eltype(h)) : 2 / (h[i] + h[i + 1])
-@inline _centered_weight(h, i, n) = (i == 1 || i == n) ? zero(eltype(h)) : inv(h[i] + h[i + 1])
-
-# The cross-weighted pair instead falls back to the one-sided difference on whichever
-# side is still on the grid at each end: `diff₊`'s row 1 is already `u_2 - u_1` and
-# `diff₋`'s row `n` is already `u_n - u_{n-1}` (the unscaled matrices' own boundary
-# convention, `_difference_operator`), so weighting those rows by `1/h[1]` and `1/h[n]`
-# respectively -- with the other family's row zeroed there -- reproduces `D₊`/`D₋`
-# exactly, matching the grid-function engine's boundary case above
-# (gpena/Bramble.jl#183).
-@inline _cross_forward_weight(h, i, n) = i == n ? zero(eltype(h)) :
-                                         (i == 1 ? inv(h[1]) : h[i] / ((h[i] + h[i + 1]) * h[i + 1]))
-@inline _cross_backward_weight(h, i, n) = i == 1 ? zero(eltype(h)) :
-                                          (i == n ? inv(h[n]) : h[i + 1] / ((h[i] + h[i + 1]) * h[i]))
+# Each is one `stencil_matrix` pass. The Kronecker construction they are checked
+# against, a diagonal scaling of unscaled difference matrices, is in
+# `test/space/kronecker_oracle.jl`.
 
 """
     forward_star_difference(Ωₕ::AbstractMeshType, dim_val::Val)
@@ -1241,8 +1062,7 @@ points along the direction.
 """
 function centered_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM}
     _check_stencil_dim(DIM, dim(Ωₕ))
-    n = npoints(Ωₕ(DIM))
-    n >= 3 || _throw_centered_too_few_points(DIM, n)
+    _check_centered_points(Ωₕ(DIM), DIM)
 
     return stencil_matrix(Ωₕ, CenteredDiffOp{DIM}())
 end
@@ -1259,70 +1079,9 @@ cross-weighting. The mesh still needs at least three points along the direction.
 """
 function cross_weighted_difference(Ωₕ::AbstractMeshType, dim_val::Val{DIM}) where {DIM}
     _check_stencil_dim(DIM, dim(Ωₕ))
-    n = npoints(Ωₕ(DIM))
-    n >= 3 || _throw_centered_too_few_points(DIM, n)
+    _check_centered_points(Ωₕ(DIM), DIM)
 
     return stencil_matrix(Ωₕ, CrossWeightedDiffOp{DIM}())
-end
-
-# --- Retained Kronecker oracle (gpena/Bramble.jl#185) --------------------------------- #
-#
-# An independent construction that `stencil_matrix` is checked against.
-
-function _kron_forward_star_difference(
-        Ωₕ::AbstractMeshType, dim_val::Val; vector_cache = __vector(Ωₕ)
-)
-    w = _extended_weights!(vector_cache, Ωₕ, dim_val, _star_weight)
-    return _scale_rows!(_difference_operator(Ωₕ, Forward(), dim_val), w)
-end
-
-function _kron_centered_difference(
-        Ωₕ::AbstractMeshType, dim_val::Val{DIM}; vector_cache = __vector(Ωₕ)
-) where {DIM}
-    n = npoints(Ωₕ(DIM))
-    n >= 3 || _throw_centered_too_few_points(DIM, n)
-
-    w = _extended_weights!(vector_cache, Ωₕ, dim_val, _centered_weight)
-    return _scale_rows!(difference_shift(Ωₕ, dim_val, Val(1), Val(-1)), w)
-end
-
-function _kron_cross_weighted_difference(
-        Ωₕ::AbstractMeshType, dim_val::Val{DIM}; vector_cache = __vector(Ωₕ)
-) where {DIM}
-    n = npoints(Ωₕ(DIM))
-    n >= 3 || _throw_centered_too_few_points(DIM, n)
-
-    forward = _scale_rows!(_difference_operator(Ωₕ, Forward(), dim_val),
-        _extended_weights!(vector_cache, Ωₕ, dim_val, _cross_forward_weight))
-
-    # the scaling above is already applied, so the cache is free to be rewritten
-    backward = _scale_rows!(_difference_operator(Ωₕ, Backward(), dim_val),
-        _extended_weights!(vector_cache, Ωₕ, dim_val, _cross_backward_weight))
-
-    # A dense backend has no pattern to keep. On a sparse one `+` would prune every entry
-    # where the two cancel (all of the diagonal on a uniform mesh); one `sparse` call over
-    # both triplet lists sums them on the union pattern instead.
-    forward isa SparseMatrixCSC || return forward + backward
-    i₊, j₊, v₊ = SparseArrays.findnz(forward)
-    i₋, j₋, v₋ = SparseArrays.findnz(backward)
-    return sparse(vcat(i₊, i₋), vcat(j₊, j₋), vcat(v₊, v₋), size(forward)...)
-end
-
-# --- Kronecker oracle dispatch (gpena/Bramble.jl#185) --------------------------------- #
-#
-# `kronecker_operator_matrix` is declared in shift.jl; each family's dispatch method maps
-# its public per-axis alias to the `_kron_*` construction kept above.
-for (i, suffix) in enumerate(_BRAMBLE_var2symbol)
-    for (stem, kron_fn) in (
-        (:D₋, :_kron_backward_finite_difference),
-        (:D₊, :_kron_forward_finite_difference),
-        (:D̃, :_kron_forward_star_difference),
-        (:Dc, :_kron_centered_difference),
-        (:D̽, :_kron_cross_weighted_difference)
-    )
-        alias = Symbol(stem, suffix)
-        @eval kronecker_operator_matrix(Ωₕ::AbstractMeshType, ::typeof($alias)) = $kron_fn(Ωₕ, Val($i))
-    end
 end
 
 # A grid space carries its mesh, as for every other family here.
@@ -1540,7 +1299,7 @@ end
 ) where {D, Dim}
     m = mesh(space)
     s = spacing(m, I, Dim) + forward_spacing(m, I, Dim)
-    # the averaged spacing, which is what D̃ divides by; `2 / s` as in `_star_weight`
+    # the averaged spacing, which is what D̃ divides by; `2 / s`, the weight of the forward star difference
     if I[Dim] == npoints(m, Tuple)[Dim]
         z = zero(2 / s)
         return (z, z)
@@ -1617,15 +1376,19 @@ end
     return SecondDifference{D, Int(Dim), typeof(op)}(op)
 end
 
-function resolve_ast(op::SecondDifference{D, Dim}) where {D, Dim}
-    inner = resolve_ast(op.inner_op)
-    return SecondDifference{D, Dim, typeof(inner)}(inner)
+# `resolve_ast` and `_bind_interp_spaces` as `@node_family` generates them for the families
+# above. `SecondDifference` has no alias surface, so it calls the two generators directly.
+macro _second_difference_rebuild()
+    return esc(
+        Expr(
+        :block,
+        _node_resolve_expr(:SecondDifference; source = __source__),
+        _node_bind_expr(:SecondDifference; source = __source__)
+    )
+    )
 end
 
-function _bind_interp_spaces(op::SecondDifference{D, Dim}, trial_leaf, test_leaf) where {D, Dim}
-    inner = _bind_interp_spaces(op.inner_op, trial_leaf, test_leaf)
-    return SecondDifference{D, Dim, typeof(inner)}(inner)
-end
+@_second_difference_rebuild
 
 @inline _stencil_taps(::SecondDifference) = (Val(1), Val(0), Val(-1))
 
@@ -1673,14 +1436,9 @@ end
 #
 # The tensor comes back in a `_GradientRows`. Indexing, `length`, iteration,
 # `map`, broadcasting and `Tuple(g)` act on the tuple it holds; nothing else does. It
-# tells `inner₊` (inner.jl) that row `c` is built on component `c` alone, since every leaf
-# of `∇ₕ(u(c))` is `u(c)`, and `inner₊` of two of them records that pair in a
-# `_ComponentSum` (ast.jl), so a captured coefficient over the sum distributes by type, as
-# over the `εₕ` and `divₘₕ` builders below, and `form` infers one type in 3D
-# (gpena/Bramble.jl#958). A plain tuple of gradient tuples promises nothing (a user may
-# repeat or mix components in it) and keeps #529's value gates. Every component of a
-# `TrialFunction` or `TestFunction` is an `IndexedTrialFunction`/`IndexedTestFunction`
-# (`component`, component.jl), a nested space's included, so the labels always hold.
+# marks the rows as the gradient of one composite (gpena/Bramble.jl#958). `inner₊` of two
+# of them (inner.jl) builds the sum a plain tuple of gradient tuples builds, as the
+# component of each leaf is in its type (gpena/Bramble.jl#1229).
 
 """
     Bramble._GradientRows{D, N, T}
@@ -1691,7 +1449,7 @@ test function, held so that [`inner₊`](@ref) can name the component of each ro
 and `Tuple(g)` is that tuple; anything else tuple-like needs `Tuple(g)`. `map` takes only
 these containers: with a plain tuple among its arguments, pass `Tuple(g)`. It is not a
 `LazyOp` and never reaches assembly: `inner₊` on two of them builds the sum of the rows'
-products, held in a `Bramble._ComponentSum` that names each row's component pair.
+products.
 """
 struct _GradientRows{D, N, T <: NTuple{N, NTuple{D, LazyOp{D}}}}
     rows::T
@@ -1704,16 +1462,16 @@ end
 @inline Base.lastindex(::_GradientRows{D, N}) where {D, N} = N
 @inline Base.iterate(g::_GradientRows, state...) = iterate(g.rows, state...)
 # A form may scale the rows before `inner₊` (`map(r -> κ * r, ∇ₕ(u))`, `κ .* ∇ₕ(u)`); both
-# give the plain tuple, as on the tuple `∇ₕ(components(u))`, and so lose the labels.
+# give the plain tuple, as on the tuple `∇ₕ(components(u))`.
 @inline function Base.map(f, g::_GradientRows, rest::_GradientRows...)
     return map(f, g.rows, map(Tuple, rest)...)
 end
 @inline Base.Broadcast.broadcastable(g::_GradientRows) = g.rows
 
-# Rows of `D`-tuples are labelled. In 1D `∇ₕ` of a component is the bare `D₋ₓ`, so
+# Rows of `D`-tuples come in a `_GradientRows`. In 1D `∇ₕ` of a component is the bare `D₋ₓ`, so
 # `_as_dtuple` wraps it in a 1-tuple first: the rows then sum per leaf like any other
 # (gpena/Bramble.jl#965), rather than reaching `inner₊` as one `N`-tuple of differences.
-# A plain 1D tuple gets the same 1-tuple rows, unlabelled, so both spellings meet the
+# A plain 1D tuple gets the same 1-tuple rows, in a plain tuple, so both spellings meet the
 # tuple-of-tuples `inner₊` and mix (gpena/Bramble.jl#1096).
 @inline _gradient_rows(rows) = rows
 @inline _as_dtuple(op::LazyOp{1}) = (op,)
@@ -1725,11 +1483,6 @@ end
 ) where {D}
     return _GradientRows{D, length(rows), typeof(rows)}(rows)
 end
-
-# The component pairs of `inner₊(::_GradientRows, ::_GradientRows)`'s sum, as the left fold
-# over its rows nests them: row `c` names `(c, c)`, whatever its own `D` terms are.
-_gradient_label_tree(N::Int) = foldl((l, r) -> (l, r), [(c, c) for c in 1:N])
-@generated _gradient_labels(::Val{N}) where {N} = _gradient_label_tree(N)
 
 @inline _∇ₕ_noncomposite(op::LazyOp{1}) = D₋ₓ(op)
 @inline _∇ₕ_noncomposite(op::LazyOp{D}) where {D} = ntuple(dim -> D₋(op, Val(dim)), Val(D))
@@ -1743,12 +1496,10 @@ difference of component `c` along direction `d`.
 
 The rows come in a `Bramble._GradientRows`, which is not a `Tuple`.
 `∇ₕ(u)[c][d]`, `length`, iteration, `map` and broadcasting give what they give on
-`∇ₕ(components(u))`, and `Tuple(∇ₕ(u))` is that tuple; anything else tuple-like needs
-`Tuple(∇ₕ(u))`. `map` needs every argument to be such a container; with a plain tuple
-among them, pass `Tuple(∇ₕ(u))`. The container also tells [`inner₊`](@ref) that row `c` is built on
-component `c` alone, so a captured coefficient over `inner₊(∇ₕ(u), ∇ₕ(v))` gives `form` one
-concrete type in 3D, which the plain tuple `∇ₕ(components(u))` does not; both assemble the
-same matrix. In 1D each row is the 1-tuple `(D₋ₓ(u(c)),)`, as in `∇ₕ(components(u))`,
+`∇ₕ(components(u))`. `Tuple(∇ₕ(u))` is that tuple, and anything else tuple-like needs it.
+`map` needs every argument to be such a container, so with a plain tuple among them, pass
+`Tuple(∇ₕ(u))`. [`inner₊`](@ref) of two of these containers builds the
+same sum as `inner₊` of the plain tuples `∇ₕ(components(u))` and `∇ₕ(components(v))`. In 1D each row is the 1-tuple `(D₋ₓ(u(c)),)`, as in `∇ₕ(components(u))`,
 so `∇ₕ(u)[c][1]` is that difference and the two spellings mix. On a scalar space
 (one component) this is the same `D`-tuple `∇ₕ` already returns for any
 operator.
@@ -1785,9 +1536,8 @@ end
 # consumes it is the `inner₊` method beside each struct, which expands immediately -- inside
 # the closure `form` resolves, before `simplify_ast` ever runs -- into the sum of ordinary
 # single-block `BilinearProduct`s a user would write by hand
-# (`test/form/vector_calculus.jl`'s hand-expanded reference is exactly that sum), held in a
-# `_ComponentSum` naming each term's component pair (ast.jl, gpena/Bramble.jl#939). Nothing
-# here is a `LazyOp`, so nothing here ever reaches assembly, `local_stencil` or `block_of`
+# (`test/form/vector_calculus.jl`'s hand-expanded reference is exactly that sum), (gpena/Bramble.jl#939).
+# Nothing here is a `LazyOp`, so nothing here ever reaches assembly, `local_stencil` or `block_of`
 # directly: the architecture stays "every `LazyOp` is scalar-valued, expansion happens at
 # the builder" (gpena/Bramble.jl#234).
 # `_GradientRows` above is built the same way for `∇ₕ`/`∇₊ₕ` (gpena/Bramble.jl#958), but
@@ -1799,16 +1549,14 @@ end
 # divₕ(v))` assembles `inner₊(divₕ(w), divₕ(w), Val(S))` of the runtime operator
 # (gpena/Bramble.jl#694). The staggered divergence has no runtime twin, hence its own name.
 
-@inline function _vc_bwd(op, d::Int)
-    d == 1 && return D₋ₓ(op)
-    d == 2 && return D₋ᵧ(op)
-    return D₋₂(op)
-end
-
-@inline function _vc_avg(op, d::Int)
-    d == 1 && return Mₓ(op)
-    d == 2 && return Mᵧ(op)
-    return M₂(op)
+# The `d`-th axis node of a node family, `family` being its dispatch alias (`D₋`, `Mₕ`, `Dc`,
+# `D̽ₕ`). Every `d ≥ 3` maps to the third axis, as the subscripted aliases stop there. The
+# branches keep each call's node type known to inference for a literal `d`, which a runtime
+# `Val(min(d, 3))` would not (gpena/Bramble.jl#921).
+@inline function _vc_axis(family::F, op, d::Int) where {F}
+    d == 1 && return family(op, Val(1))
+    d == 2 && return family(op, Val(2))
+    return family(op, Val(3))
 end
 
 @inline _stagger_set(i::Int, j::Int) = i == j ? (i,) : (min(i, j), max(i, j))
@@ -1825,8 +1573,11 @@ end
 # Building the four cross terms directly, the way a user would expand `(a+b)*(c+d)` by hand,
 # means no node here ever mixes components in the first place.
 @inline function _strain_pieces(u, i::Int, j::Int)
-    i == j && return (_vc_bwd(u(i), i),)
-    return ((1 // 2) * _vc_avg(_vc_bwd(u(i), j), i), (1 // 2) * _vc_avg(_vc_bwd(u(j), i), j))
+    i == j && return (_vc_axis(D₋, u(i), i),)
+    return (
+        (1 // 2) * _vc_axis(Mₕ, _vc_axis(D₋, u(i), j), i),
+        (1 // 2) * _vc_axis(Mₕ, _vc_axis(D₋, u(j), i), j)
+    )
 end
 
 # One term of the staggered divergence: D_{-i}(u_i), averaged onto the shared cell centre by
@@ -1836,9 +1587,9 @@ end
 # constant propagation does not reach through it and the elasticity `form` inferred `Any`
 # (gpena/Bramble.jl#921).
 @generated function _div_term(u, ::Val{i}, ::Val{D}) where {i, D}
-    ex = :(_vc_bwd(u($i), $i))
+    ex = :(_vc_axis(D₋, u($i), $i))
     for d in 1:D
-        d == i || (ex = :(_vc_avg($ex, $d)))
+        d == i || (ex = :(_vc_axis(Mₕ, $ex, $d)))
     end
     return :(@inline; $ex)
 end
@@ -1849,8 +1600,7 @@ end
 Builder-only container for [`εₕ`](@ref)'s `D × D` entries, each held as its additive pieces
 (`Bramble._strain_pieces`) rather than their sum. Never reaches assembly or an AST walker:
 [`inner₊`](@ref) on two of these expands immediately into the sum of single-block products a
-user would write out by hand, held in a `Bramble._ComponentSum` that names each term's
-component pairs.
+user would write out by hand.
 """
 struct _StrainTensor{D, T}
     entries::T
@@ -1903,20 +1653,8 @@ end
         )
     end
     )
-    return _component_sum(foldl(+, terms), Val(_strain_labels(Val(D))))
+    return foldl(+, terms)
 end
-
-# The component pairs of `inner₊(::_StrainTensor, ::_StrainTensor)`'s terms, in its order
-# (entries `i`, `j`, then `_cross_terms`' pieces `a` of `u`, `b` of `v`), as the left-folded
-# tree `_ComponentSum` (ast.jl) reads: the piece of `ε_ij` built on `u(k)` names `k`
-# (`_strain_pieces`). `u(k)` puts `k` on every indexed leaf of `u`, so the pair holds
-# whatever `u` is. A function of `D` alone, a constant through the generated method below.
-function _strain_label_tree(D::Int)
-    pieces(i, j) = i == j ? (i,) : (i, j)
-    leaves = [(a, b) for i in 1:D for j in 1:D for a in pieces(i, j) for b in pieces(i, j)]
-    return foldl((l, r) -> (l, r), leaves)
-end
-@generated _strain_labels(::Val{D}) where {D} = _strain_label_tree(D)
 
 """
     Bramble._DivergenceTerms{D}
@@ -1946,7 +1684,7 @@ through [`inner₊`](@ref)`(left, right, Val(S))`.
 See also: [`divₘₕ`](@ref), [`εₕ`](@ref).
 """
 function divₕ(u::LazyOp{D}) where {D}
-    terms = ntuple(i -> _vc_bwd(u(i), i), Val(D))
+    terms = ntuple(i -> _vc_axis(D₋, u(i), i), Val(D))
     return _DivergenceTerms{D, typeof(terms)}(terms)
 end
 
@@ -1980,16 +1718,8 @@ end
             end)
         end
     )
-    return _component_sum(sum, Val(_divergence_labels(Val(D))))
+    return sum
 end
-
-# The component pairs of the sum above, as `_strain_labels` gives the strain's: term `i` of
-# a divergence is built on `u(i)`, and the pairs nest as the two `foldl`s do.
-function _divergence_label_tree(D::Int)
-    row(i) = foldl((l, r) -> (l, r), [(i, j) for j in 1:D])
-    return foldl((l, r) -> (l, r), [row(i) for i in 1:D])
-end
-@generated _divergence_labels(::Val{D}) where {D} = _divergence_label_tree(D)
 
 # --- divcₕ, εcₕ: centered divergence and strain over composite functions ---------------- #
 #
@@ -2000,12 +1730,6 @@ end
 # the `innerₕ` method beside it. Both methods take `LazyOp{D}`, which is more specific than
 # the runtime `divcₕ(uₕ)`/`εcₕ(uₕ)` over grid functions (untyped) and disjoint from any grid
 # function, so the symbolic and numeric families never meet.
-
-@inline function _vc_centered(op, d::Int)
-    d == 1 && return Dcₓ(op)
-    d == 2 && return Dcᵧ(op)
-    return Dc₂(op)
-end
 
 """
     divcₕ(u::LazyOp{D}) -> LazyOp
@@ -2024,7 +1748,7 @@ wherever an operator is, e.g. `innerₕ(p, divcₕ(v))`. Shares its name with th
 See also: [`εcₕ`](@ref), [`divₕ`](@ref).
 """
 function divcₕ(u::LazyOp{D}) where {D}
-    return foldl(+, ntuple(i -> _vc_centered(u(i), i), Val(D)))
+    return foldl(+, ntuple(i -> _vc_axis(Dc, u(i), i), Val(D)))
 end
 
 """
@@ -2038,8 +1762,8 @@ struct _CenteredStrainTensor{D, T}
     entries::T
 end
 
-# `diff(op, d)` is the family's difference along `d`: `_vc_centered` for `εcₕ`,
-# `_vc_cross_weighted` for `ε̽ₕ`.
+# `diff(op, d)` is the family's difference along `d`: `_vc_axis(Dc, ...)` for `εcₕ`,
+# `_vc_axis(D̽ₕ, ...)` for `ε̽ₕ`.
 @inline function _centered_strain_pieces(diff::F, u, i::Int, j::Int) where {F}
     i == j && return (diff(u(i), i),)
     return ((1 // 2) * diff(u(i), j), (1 // 2) * diff(u(j), i))
@@ -2064,7 +1788,7 @@ See also: [`divcₕ`](@ref), [`εₕ`](@ref).
 """
 function εcₕ(u::LazyOp{D}) where {D}
     entries = ntuple(Val(D)) do i
-        ntuple(j -> _centered_strain_pieces(_vc_centered, u, i, j), Val(D))
+        ntuple(j -> _centered_strain_pieces(Base.Fix1(_vc_axis, Dc), u, i, j), Val(D))
     end
     return _CenteredStrainTensor{D, typeof(entries)}(entries)
 end
@@ -2099,12 +1823,6 @@ end
 # place of `Dc`: an ordinary operator sum, and a `_CenteredStrainTensor` consumed by the same
 # `innerₕ` method. No form curl, matching the centered family. The same `LazyOp{D}` versus
 # untyped split keeps them apart from the runtime `div̽ₕ(uₕ)`/`ε̽ₕ(uₕ)`.
-
-@inline function _vc_cross_weighted(op, d::Int)
-    d == 1 && return D̽ₕ(op, Val(1))
-    d == 2 && return D̽ₕ(op, Val(2))
-    return D̽ₕ(op, Val(3))
-end
 
 """
     div̽ₕ(u::LazyOp{D}) -> LazyOp
@@ -2147,7 +1865,7 @@ See also: [`div̽ₕ`](@ref), [`εcₕ`](@ref).
 """
 function ε̽ₕ(u::LazyOp{D}) where {D}
     entries = ntuple(Val(D)) do i
-        ntuple(j -> _centered_strain_pieces(_vc_cross_weighted, u, i, j), Val(D))
+        ntuple(j -> _centered_strain_pieces(Base.Fix1(_vc_axis, D̽ₕ), u, i, j), Val(D))
     end
     return _CenteredStrainTensor{D, typeof(entries)}(entries)
 end
@@ -2156,13 +1874,18 @@ end
 # Expression rendering (gpena/Bramble.jl#274)
 # ==============================================================================
 
-expression(op::BackwardDifference{D, Dim}) where {D, Dim} = "D₋$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
-expression(op::ForwardDifference{D, Dim}) where {D, Dim} = "D₊$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
-expression(op::CenteredDifference{D, Dim}) where {D, Dim} = "Dc$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
-expression(op::StarDifference{D, Dim}) where {D, Dim} = "D̃$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
-function expression(op::CrossWeightedDifference{D, Dim}) where {D, Dim}
-    "D̽$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
+# One rendering for every node family whose text is `<stem><axis>(inner)`: each family names
+# its stem in its own file, beside its struct. `SecondDifference` and `ShiftNode` render
+# differently and keep their own methods.
+function expression(op::StencilNode{D, Dim}) where {D, Dim}
+    "$(_expression_stem(op))$(_BRAMBLE_var2symbol[Dim])($(expression(op.inner_op)))"
 end
+
+_expression_stem(::BackwardDifference) = "D₋"
+_expression_stem(::ForwardDifference) = "D₊"
+_expression_stem(::CenteredDifference) = "Dc"
+_expression_stem(::StarDifference) = "D̃"
+_expression_stem(::CrossWeightedDifference) = "D̽"
 function expression(op::SecondDifference{D, Dim}) where {D, Dim}
     s = _BRAMBLE_var2symbol[Dim]
     "D̃$(s)(D₋$(s)($(expression(op.inner_op))))"

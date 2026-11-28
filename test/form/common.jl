@@ -267,8 +267,8 @@ _mul_seconds(y, b, x) = @elapsed mul!(y, matrix_free_operator(b), x)
     end
 
     @testset "Constructors" begin
-        @test trial_function(Val(2)) === TrialFunction{2}()
-        @test test_function(Val(3)) === TestFunction{3}()
+        @test trial_function(Wₕ) === TrialFunction{2, Bramble.leaf_count(Wₕ)}()
+        @test test_function(Wₕ1) === TestFunction{1, Bramble.leaf_count(Wₕ1)}()
         @test source_function(sin, Val(1)) isa SourceFunction{1}
         @test IndexedTrialFunction{2}(7) === IndexedTrialFunction{2, 7}()
         @test IndexedTestFunction{2}(4) === IndexedTestFunction{2, 4}()
@@ -282,7 +282,7 @@ _mul_seconds(y, b, x) = @elapsed mul!(y, matrix_free_operator(b), x)
         @test d.points === (0.3, 0.6)
         @test d.strengths === 2.5
         @test Bramble.dirac([0, 1]).points === (0.0, 1.0)
-        @test Bramble.DiracSource{1}((0.5,), 2.0) === Bramble.DiracSource{1, Tuple{Float64}, Float64}((0.5,), 2.0)
+        @test Bramble.dirac((0.5,), 2.0) === Bramble.DiracSource{1, Tuple{Float64}, Float64}((0.5,), 2.0)
 
         # several points, each normalised by its own spelling: a bare number is a 1D
         # point, a vector a D-dimensional one
@@ -373,6 +373,15 @@ _mul_seconds(y, b, x) = @elapsed mul!(y, matrix_free_operator(b), x)
         @test weighted isa GridFunctionScale
         @test weighted.grid_function === cₕ
         @test weighted.inner_op.vec ≈ sampled
+
+        # nested scales, the outer one a `Ref`, which must stay the caller's own `Ref`
+        r = Ref(2.0)
+        nested = Bramble._lower_sources(r * (cₕ * (3 * sf)), Wₕ1)
+        @test nested.scalar === r
+        @test nested.inner_op.grid_function === cₕ
+        @test nested.inner_op.inner_op.scalar == 3
+        @test nested.inner_op.inner_op.inner_op isa SourceVector{1}
+        @test nested.inner_op.inner_op.inner_op.vec ≈ sampled
 
         u1 = TrialFunction{1}()
         @test Bramble._lower_sources(3 * u1, Wₕ1) === 3 * u1

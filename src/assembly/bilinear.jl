@@ -511,11 +511,11 @@ precompile(_type_float64_values, (Any,))
     _normalised_in(op.left_op), _normalised_in(op.right_op))
 @inline function _normalised(op::BilinearProduct{D, W}) where {D, W}
     l, r = _normalised_in(op.left_op), _normalised_in(op.right_op)
-    return BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+    return BilinearProduct{D, W}(op.inner, l, r)
 end
 @inline function _normalised(op::LinearProduct{D, W}) where {D, W}
     l, r = _normalised_in(op.left_op), _normalised_in(op.right_op)
-    return LinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+    return LinearProduct{D, W}(op.inner, l, r)
 end
 @inline _normalised_scalar(c) = c
 @inline _normalised_scalar(c::_LooseScalar) = Float64(c)
@@ -616,13 +616,13 @@ function _split_product(op::BilinearProduct{D, W}, l, r, ls, rs) where {D, W}
     length(ls) * length(rs) > 16 && return op
     if _mixed_scales(l) || _mixed_scales(r)
         return l === op.left_op && r === op.right_op ? op :
-               BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+               BilinearProduct{D, W}(op.inner, l, r)
     end
     if length(ls) == 1 && length(rs) == 1
         l = _hoisted(l, ls)
         r = _hoisted(r, rs)
         return l === op.left_op && r === op.right_op ? op :
-               BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+               BilinearProduct{D, W}(op.inner, l, r)
     end
     return _product_sum(op, ls, rs)
 end
@@ -822,11 +822,9 @@ precompile(_type_tap_scalar, (Any, Any))
     _value_type(op, E), op)
 @inline _join_scalars(::Type{S}, op::OperatorAdd) where {S} = _join_scalars(
     _join_scalars(S, op.left_op), op.right_op)
-@inline _join_scalars(::Type{S}, op::OperatorScale) where {S} = _join_scalar(
-    S, promote_type(_scalar_type(op.scalar), S))
+@inline _join_scalars(::Type{S}, op::OperatorScale) where {S} = promote_type(
+    _scalar_type(op.scalar), S)
 @inline _join_scalars(::Type{S}, ::Any) where {S} = S
-@inline _join_scalar(::Type{S}, ::Type{S}) where {S} = S
-@inline _join_scalar(::Type, ::Type{P}) where {P} = P
 @inline _widen_summands(op::OperatorAdd, ::Type{S}, ::Type{E}) where {S, E} = OperatorAdd(
     _widen_summands(op.left_op, S, E), _widen_summands(op.right_op, S, E))
 @inline function _widen_summands(op, ::Type{S}, ::Type{E}) where {S, E}
@@ -850,7 +848,7 @@ end
 function _widened_product(op::BilinearProduct{D, W}, ::Type{E}) where {D, W, E}
     l = _bits_uniform_scales(op.left_op, E)
     r = _bits_uniform_scales(op.right_op, E)
-    return BilinearProduct{D, W, typeof(l), typeof(r)}(op.inner, l, r)
+    return BilinearProduct{D, W}(op.inner, l, r)
 end
 _bits_uniform_scales(op, ::Type{E}) where {E} = isbitstype(_joined_value_type(op, E)) ?
                                                 _uniform_scales(op, E) : op
@@ -1232,22 +1230,16 @@ function apply_dirichlet_labels!(
         A::AbstractMatrix, form::BilinearForm, dirichlet_labels, dirichlet_components = nothing
 )
     if dirichlet_labels !== nothing
-        if dirichlet_labels isa Symbol
+        if length(dirichlet_labels) >= 2
+            _dirichlet_union!(A, test_space(form), form.cache, dirichlet_labels,
+                dirichlet_components)
+        elseif !isempty(dirichlet_labels)
             dirichlet_bc!(
-                A, test_space(form), dirichlet_labels; components = dirichlet_components
+                A,
+                test_space(form),
+                dirichlet_labels...;
+                components = dirichlet_components
             )
-        elseif dirichlet_labels isa Tuple
-            if length(dirichlet_labels) >= 2
-                _dirichlet_union!(A, test_space(form), form.cache, dirichlet_labels,
-                    dirichlet_components)
-            elseif !isempty(dirichlet_labels)
-                dirichlet_bc!(
-                    A,
-                    test_space(form),
-                    dirichlet_labels...;
-                    components = dirichlet_components
-                )
-            end
         end
     end
 end

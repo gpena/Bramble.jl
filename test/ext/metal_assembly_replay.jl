@@ -12,7 +12,7 @@ using ..TestUtils: _run_gpu_tests
 # recording fill -- the first `assemble` -- searches `A.mirror`'s `rowptr`/`colval`.
 #
 # The proof scrubs `A.mirror.colval` to zeros after the recording fill: any search on a
-# refill then misses every entry and throws (`add_to_sparse!`'s missing-pattern error), while
+# refill then misses every entry and throws (`_throw_missing_pattern_entry`'s error), while
 # a replay never reads `colval` and fills the matrix correctly. The mirror's `colval` is a
 # host copy only the search reads (the device array was uploaded from it when the matrix was
 # built), and it is restored before the matrix is read back, so nothing outside the refills

@@ -60,7 +60,16 @@ wrote `S` in.
 struct InnerPlusSet{S} <: AbstractInnerProduct end
 
 """
-    InnerGamma{M} <: AbstractInnerProduct
+    AbstractInnerGamma{M} <: AbstractInnerProduct
+
+The surface weights [`InnerGamma`](@ref), `InnerGammaNormal` and
+`InnerGammaFacet`. `M` is the type of their `mask` field: the labels
+`_SurfaceLabels{L}` from the builder until `form` resolves them, then the face mask.
+"""
+abstract type AbstractInnerGamma{M} <: AbstractInnerProduct end
+
+"""
+    InnerGamma{M} <: AbstractInnerGamma{M}
 
 Quadrature weights for the \$(D-1)\$-dimensional surface integral over the grid faces `mask`
 names (gpena/Bramble.jl#157).
@@ -71,7 +80,7 @@ face mask `_surface_mask` (mesh/queries.jl) answers, `mask::NTuple{D, NTuple{2, 
 The mask is a field, not a type parameter, so the resolved type is fixed by `D` and `form`
 infers whatever faces the labels name (gpena/Bramble.jl#895).
 """
-struct InnerGamma{M} <: AbstractInnerProduct
+struct InnerGamma{M} <: AbstractInnerGamma{M}
     mask::M
 end
 
@@ -99,6 +108,11 @@ struct BilinearProduct{
     right_op::RightType
 end
 
+# The node types follow from the operands, so a rebuild names only `D` and the weight type.
+@inline function BilinearProduct{D, W}(w, left, right) where {D, W}
+    return BilinearProduct{D, W, typeof(left), typeof(right)}(w, left, right)
+end
+
 """
     LinearProduct{D,InnerType,LeftType,RightType} <: LazyOp{D}
 
@@ -112,6 +126,10 @@ struct LinearProduct{
     inner::InnerType
     left_op::LeftType
     right_op::RightType
+end
+
+@inline function LinearProduct{D, W}(w, left, right) where {D, W}
+    return LinearProduct{D, W, typeof(left), typeof(right)}(w, left, right)
 end
 
 # ==============================================================================
@@ -262,10 +280,9 @@ the sum once rather than each term separately.
 end
 
 # Only a surface weight checks its source, refusing a Dirac term (`_refuse_surface_dirac`,
-# ast/simplifier.jl); `InnerGammaNormal` and `InnerGammaFacet` add their methods in
-# operators/normal.jl.
+# ast/simplifier.jl).
 @inline _check_surface_source(::AbstractInnerProduct, left) = nothing
-@inline _check_surface_source(::InnerGamma, left) = _refuse_surface_dirac(left)
+@inline _check_surface_source(::AbstractInnerGamma, left) = _refuse_surface_dirac(left)
 
 # A source on the left makes the product linear; anything else makes it bilinear.
 @inline function _product(
@@ -274,10 +291,10 @@ end
     _check_direction(w, Val(D))
     _check_surface_source(w, left)
     return if _is_source_only(left)
-        LinearProduct{D, W, typeof(left), typeof(right)}(w, left, right)
+        LinearProduct{D, W}(w, left, right)
     else
         _check_one_interpolated_side(left, right)
-        BilinearProduct{D, W, typeof(left), typeof(right)}(w, left, right)
+        BilinearProduct{D, W}(w, left, right)
     end
 end
 
@@ -318,7 +335,7 @@ end
 @inline function _linear_source(w::W, l, r::LazyOp{D}) where {W <: AbstractInnerProduct, D}
     _check_direction(w, Val(D))
     sf = _as_source(l, Val(D))
-    return LinearProduct{D, W, typeof(sf), typeof(r)}(w, sf, r)
+    return LinearProduct{D, W}(w, sf, r)
 end
 
 @inline _inner_source(w::AbstractInnerProduct, l, r::LazyOp, markers) = _restrict_by_markers(_linear_source(w, l, r), markers)
@@ -433,17 +450,7 @@ See also: [`innerₕ`](@ref), [`inner₊`](@ref)
 """
 function inner_Γ(left::LazyOp{D}, right::LazyOp{D}; markers = ()) where {D}
     _refuse_surface_dirac(left)
-    return _product(_inner_gamma(Val(D), markers), left, right)
-end
-
-function inner_Γ(l::Function, r::LazyOp{D}; markers = ()) where {D}
-    return _linear_source(_inner_gamma(Val(D), markers), l, r)
-end
-function inner_Γ(l::Number, r::LazyOp{D}; markers = ()) where {D}
-    return _linear_source(_inner_gamma(Val(D), markers), l, r)
-end
-function inner_Γ(l::VectorElement, r::LazyOp{D}; markers = ()) where {D}
-    return _linear_source(_inner_gamma(Val(D), markers), l, r)
+    return _product(InnerGamma{_label_set(markers)}(), left, right)
 end
 
 # A bare symbol is the common spelling and reads better than a one-tuple. Normalized here
@@ -451,14 +458,15 @@ end
 @inline _as_labels(s::Symbol) = (s,)
 @inline _as_labels(t::NTuple{N, Symbol}) where {N} = t
 
-# The node holds its labels until `form`, which knows the mesh a label is defined on
-# (gpena/Bramble.jl#660): resolving them there is a runtime computation producing the face
-# mask, made once per form, not once per grid point, held as a field so the node that comes
-# out has a type the labels' type fixes (gpena/Bramble.jl#895).
-@inline function _inner_gamma(::Val{D}, markers) where {D}
+# The labels `markers` names, as the type every surface weight holds until `form`, which
+# knows the mesh a label is defined on (gpena/Bramble.jl#660): resolving them there is a
+# runtime computation producing the face mask, made once per form, not once per grid point,
+# held as a field so the node that comes out has a type the labels' type fixes
+# (gpena/Bramble.jl#895). The normal and facet weights (operators/normal.jl) take theirs here.
+@inline function _label_set(markers)
     labels = _as_labels(markers)
     isempty(labels) && _throw_no_surface_labels()
-    return InnerGamma{_canonical_labels(_SurfaceLabels{labels})}()
+    return _canonical_labels(_SurfaceLabels{labels})
 end
 
 # The labels a surface weight names, before `form` resolves them to faces through
@@ -498,22 +506,18 @@ function _resolve_surfaces(op::GridFunctionScale{D}, spaces) where {D}
     i = _resolve_surfaces(op.inner_op, spaces)
     return GridFunctionScale{D, typeof(op.grid_function), typeof(i)}(op.grid_function, i)
 end
-function _resolve_surfaces(op::_ComponentSum{D, P}, spaces) where {D, P}
-    s = _resolve_surfaces(op.sum, spaces)
-    return _ComponentSum{D, P, typeof(s)}(s)
-end
 function _resolve_surfaces(op::RegionRestriction, spaces)
     return _rebuild_restriction(op, op.region, _resolve_surfaces(op.inner_op, spaces))
 end
 function _resolve_surfaces(op::BilinearProduct{D}, spaces) where {D}
     w = _resolved_on_walked(op, op.inner, spaces...)
-    return BilinearProduct{D, typeof(w), typeof(op.left_op), typeof(op.right_op)}(
-        w, op.left_op, op.right_op)
+    W = typeof(w)
+    return BilinearProduct{D, W}(w, op.left_op, op.right_op)
 end
 function _resolve_surfaces(op::LinearProduct{D}, spaces) where {D}
     w = _resolved_on_walked(op, op.inner, spaces...)
-    return LinearProduct{D, typeof(w), typeof(op.left_op), typeof(op.right_op)}(
-        w, op.left_op, op.right_op)
+    W = typeof(w)
+    return LinearProduct{D, W}(w, op.left_op, op.right_op)
 end
 
 # Routed as `_check_centered_meshes` (assembly/linear.jl) routes: a product naming a
@@ -567,9 +571,8 @@ _type_has_labels(T::DataType) = any(p -> p isa Type && _type_has_labels(p), T.pa
 _type_has_labels(::Any) = false
 @generated _has_surface_labels(::T) where {T} = _type_has_labels(T)
 
-# The labels an unresolved surface weight holds; `InnerGammaNormal`'s case is in
-# operators/normal.jl.
-_surface_labels(::Type{InnerGamma{_SurfaceLabels{L}}}) where {L} = L
+# The labels an unresolved surface weight holds.
+_surface_labels(::Type{<:AbstractInnerGamma{_SurfaceLabels{L}}}) where {L} = L
 
 @noinline function _throw_surface_leaves_disagree(::Type{W}, a::Int, b::Int) where {W}
     held = join((":$s" for s in _surface_labels(W)), ", ")
@@ -750,9 +753,8 @@ Each element pair `(left[k], right[k])` is a `D`-tuple of `LazyOp` (a gradient),
 which dispatches to the existing `inner₊(::NTuple{D,LazyOp}, ::NTuple{D,LazyOp})`.
 
 `inner₊(∇ₕ(u), ∇ₕ(v))` on a composite `u` and `v` builds the same sum, in the same order.
-There `∇ₕ` returns rows labelled by component (`Bramble._GradientRows`), and the sum
-records those labels, so a coefficient captured over it leaves `form` one concrete type
-in 3D as well. One side labelled and the other a plain tuple takes this method.
+There `∇ₕ` returns its rows in a `Bramble._GradientRows`, which takes this method too, as
+does one side in it and the other a plain tuple.
 
 The rows may differ in type (`∇ₕ((u(1) + u(2), u(2)))`), but both sides need the same
 number of them, or it throws a `DimensionMismatch` naming both counts.
@@ -784,18 +786,8 @@ end
     )
 end
 
-# The gradients of a composite trial and test function (difference.jl): the sum above,
-# with row `c`'s pair `(c, c)` in a `_ComponentSum` (ast.jl, gpena/Bramble.jl#958).
-function inner₊(
-        left::_GradientRows{D, N},
-        right::_GradientRows{D, N};
-        markers::NTuple{M, Symbol} = NTuple{0, Symbol}()
-) where {D, N, M}
-    sum = foldl(+, map(inner₊, left.rows, right.rows))
-    return _restrict_by_markers(_component_sum(sum, Val(_gradient_labels(Val(N)))), markers)
-end
-
-# Anything else with a labelled side is the plain tuple's, as it was before the labels.
+# The gradients of a composite trial and test function (difference.jl) are the tuple they
+# hold, so they give the sum above.
 function inner₊(
         left::_GradientRows, right::_GradientRows;
         markers::NTuple{M, Symbol} = NTuple{0, Symbol}()
@@ -989,23 +981,27 @@ end
     return SourceConstant{D, typeof(l)}(l)
 end
 
-# Linear Forms (e.g. innerₕ(f, v) where f is a Function, Number, or VectorElement and v is
-# TestFunction). `markers` restricts each the same way it does the bilinear forms above: a
-# mask on which grid points the source term contributes to at all.
-function innerₕ(
-        l::Function, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {D, N}
-    return _inner_source(InnerH(), l, r, markers)
-end
-function innerₕ(
-        l::Number, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {D, N}
-    return _inner_source(InnerH(), l, r, markers)
-end
-function innerₕ(
-        l::VectorElement, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {D, N}
-    return _inner_source(InnerH(), l, r, markers)
+# Linear forms (e.g. innerₕ(f, v) where f is a Function, Number, or VectorElement and v is
+# TestFunction), one method per product. `markers` restricts each the same way it does the
+# bilinear forms above: a mask on which grid points the source term contributes to at all.
+# `inner_Γ`'s names faces instead, held in its weight, so nothing is restricted there. The
+# composite `VectorElement` methods (ast/component.jl) are more specific and take theirs.
+for (f, w, typed) in (
+    (:innerₕ, :(InnerH()), true),
+    (:inner₊ₓ, :(InnerPlus{1}()), true),
+    (:inner₊ᵧ, :(InnerPlus{2}()), true),
+    (:inner₊₂, :(InnerPlus{3}()), true),
+    (:inner_Γ, :(InnerGamma{_label_set(markers)}()), false)
+)
+    kw = typed ? Expr(:kw, :(markers::NTuple{N, Symbol}), :(NTuple{0, Symbol}())) :
+         Expr(:kw, :markers, :(()))
+    params = typed ? (:D, :N) : (:D,)
+    restrict = typed ? :markers : :(())
+    @eval function $f(
+            l::Union{Function, Number, VectorElement}, r::LazyOp{D}; $kw
+    ) where {$(params...)}
+        return _inner_source($w, l, r, $restrict)
+    end
 end
 
 # A bare source is the source node it stands for, so the direction comes from the same
@@ -1057,54 +1053,6 @@ end
         "inner₊ of two grid functions directly.",
     ),
     )
-end
-
-function inner₊ₓ(
-        l::Function, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {D, N}
-    return _inner_source(InnerPlus{1}(), l, r, markers)
-end
-function inner₊ᵧ(
-        l::Function, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {D, N}
-    return _inner_source(InnerPlus{2}(), l, r, markers)
-end
-function inner₊₂(
-        l::Function, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {D, N}
-    return _inner_source(InnerPlus{3}(), l, r, markers)
-end
-
-function inner₊ₓ(
-        l::Number, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {D, N}
-    return _inner_source(InnerPlus{1}(), l, r, markers)
-end
-function inner₊ᵧ(
-        l::Number, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {D, N}
-    return _inner_source(InnerPlus{2}(), l, r, markers)
-end
-function inner₊₂(
-        l::Number, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {D, N}
-    return _inner_source(InnerPlus{3}(), l, r, markers)
-end
-
-function inner₊ₓ(
-        l::VectorElement, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {D, N}
-    return _inner_source(InnerPlus{1}(), l, r, markers)
-end
-function inner₊ᵧ(
-        l::VectorElement, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {D, N}
-    return _inner_source(InnerPlus{2}(), l, r, markers)
-end
-function inner₊₂(
-        l::VectorElement, r::LazyOp{D}; markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {D, N}
-    return _inner_source(InnerPlus{3}(), l, r, markers)
 end
 
 # ==============================================================================
@@ -1187,17 +1135,12 @@ end
 function resolve_ast(op::BilinearProduct{D, InnerType}) where {D, InnerType}
     left = resolve_ast(op.left_op)
     right = resolve_ast(op.right_op)
-    return BilinearProduct{D, InnerType, typeof(left), typeof(right)}(op.inner, left, right)
+    return BilinearProduct{D, InnerType}(op.inner, left, right)
 end
 function resolve_ast(op::LinearProduct{D, InnerType}) where {D, InnerType}
     left = resolve_ast(op.left_op)
     right = resolve_ast(op.right_op)
-    return LinearProduct{D, InnerType, typeof(left), typeof(right)}(op.inner, left, right)
-end
-# Kept around its resolved sum: `resolve_ast(::Any)` would return it with `sum` unresolved.
-function resolve_ast(op::_ComponentSum{D, P}) where {D, P}
-    s = resolve_ast(op.sum)
-    return _ComponentSum{D, P, typeof(s)}(s)
+    return LinearProduct{D, InnerType}(op.inner, left, right)
 end
 
 # Disambiguation for the empty tuple.

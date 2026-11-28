@@ -394,10 +394,9 @@ scalar the way `half_spacing` would on the host path.
 ) where {d, D}
     factors = ntuple(Val(D - 1)) do k
         e = k < d ? k : k + 1
-        hs = _apply_hs_logic.(host_half_spacings(Ωₕ(e)))
-        reshape(hs, ntuple(j -> j == k ? length(hs) : 1, D - 1))
+        _apply_hs_logic.(host_half_spacings(Ωₕ(e)))
     end
-    hostw = reduce((a, b) -> a .* b, factors)
+    hostw = _outer_product(factors)
     devw = similar(u, eltype(hostw), length(hostw))
     copyto!(devw, vec(hostw))
     return reshape(devw, size(hostw))
@@ -744,18 +743,22 @@ end
 # grid point -- not merely slow, an error under `GPUArrays`' default scalar-indexing guard.
 #
 # `_separable_weights_full` materializes the D-dimensional weight tensor instead, one
-# reshape-and-broadcast per axis rather than a `@kernel`: each `factors[d]` is reshaped to
+# reshape-and-broadcast per axis rather than a `@kernel`. Each `factors[d]` is reshaped to
 # broadcast only along its own axis (singleton elsewhere), and multiplying the D reshaped
 # factors together broadcasts out to the full `dims` shape, exactly `SeparableWeights`'s own
 # `__prod`, computed once for the whole grid instead of once per point. `reshape(u, dims)`
 # is a view, not a copy, so the reduction below is one `GPUArrays` `sum` over a broadcasted
-# expression: reductions need no kernel.
-@inline function _separable_weights_full(w::SeparableWeights{D}) where {D}
-    dims = w.dims
-    shaped = ntuple(D) do d
-        reshape(w.factors[d], ntuple(k -> k == d ? dims[d] : 1, D))
-    end
+# expression, so the reductions need no kernel.
+# The tensor product of `K` factors as one broadcast array: factor `k` is reshaped to run
+# along axis `k` alone (singleton elsewhere), so multiplying them broadcasts out to the
+# full shape. The three device reductions share it.
+@inline function _outer_product(fs::NTuple{K, AbstractVector}) where {K}
+    shaped = ntuple(k -> reshape(fs[k], ntuple(j -> j == k ? length(fs[k]) : 1, Val(K))), Val(K))
     return reduce((a, b) -> a .* b, shaped)
+end
+
+@inline function _separable_weights_full(w::SeparableWeights{D}) where {D}
+    return _outer_product(w.factors)
 end
 
 """
@@ -904,15 +907,6 @@ end
     )
 end
 
-@inline function _directional_inner_plus(
-        uₕ::VectorElement{<:ScalarGridSpace},
-        vₕ::VectorElement{<:ScalarGridSpace},
-        ::Val{DIM};
-        markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {DIM, N}
-    return inner₊(uₕ, vₕ, Val((DIM,)); markers = markers)
-end
-
 """
     inner₊ₓ(uₕ::VectorElement, vₕ::VectorElement; markers = ()) -> Number
 
@@ -949,7 +943,7 @@ integral).
     uₕ::VectorElement{<:ScalarGridSpace},
     vₕ::VectorElement{<:ScalarGridSpace};
     markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {N} = _directional_inner_plus(uₕ, vₕ, Val(1); markers = markers)
+) where {N} = inner₊(uₕ, vₕ, Val((1,)); markers = markers)
 
 """
     inner₊ᵧ(uₕ::VectorElement, vₕ::VectorElement; markers = ()) -> Number
@@ -982,7 +976,7 @@ integral).
     uₕ::VectorElement{<:ScalarGridSpace},
     vₕ::VectorElement{<:ScalarGridSpace};
     markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {N} = _directional_inner_plus(uₕ, vₕ, Val(2); markers = markers)
+) where {N} = inner₊(uₕ, vₕ, Val((2,)); markers = markers)
 
 """
     inner₊₂(uₕ::VectorElement, vₕ::VectorElement; markers = ()) -> Number
@@ -1004,7 +998,7 @@ integral).
     uₕ::VectorElement{<:ScalarGridSpace},
     vₕ::VectorElement{<:ScalarGridSpace};
     markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
-) where {N} = _directional_inner_plus(uₕ, vₕ, Val(3); markers = markers)
+) where {N} = inner₊(uₕ, vₕ, Val((3,)); markers = markers)
 
 @noinline _throw_inner_plus_bounds(d) = throw(BoundsError(inner₊, d))
 
@@ -1059,7 +1053,7 @@ See also: [`inner₊ₓ`](@ref), [`inner₊ᵧ`](@ref), [`inner₊₂`](@ref).
         d::Integer;
         markers::NTuple{N, Symbol} = NTuple{0, Symbol}()
 ) where {N}
-    return _directional_inner_plus(uₕ, vₕ, _inner_plus_val(d); markers = markers)
+    return inner₊(uₕ, vₕ, _inner_plus_val(d); markers = markers)
 end
 
 @inline function inner₊(
@@ -1192,15 +1186,13 @@ function _generate_inner_plus_body(u_type, v_type, result_kind::Symbol)
         u_component = u_is_tuple ? :(uₕ[$i]) : :uₕ
         v_component = v_is_tuple ? :(vₕ[$i]) : :vₕ
         dir = min(i, mesh_dim) # avoid out-of-bounds when tuples are longer than spatial dim
-        return :(_directional_inner_plus($u_component, $v_component, Val($dir)))
+        return :(inner₊($u_component, $v_component, Val(($dir,))))
     end
 
     if result_kind === :sum
         return :(+($(terms...)))
-    elseif result_kind === :tuple
-        return :($(Expr(:tuple, terms...)))
     else
-        return :(throw(ArgumentError("Invalid result kind for code generation.")))
+        return :($(Expr(:tuple, terms...)))
     end
 end
 
@@ -1367,11 +1359,8 @@ end
     hinterior = @view h[2:dims[d]]
     hr = reshape(hinterior, ntuple(k -> k == d ? length(hinterior) : 1, D))
     δ = (hi .- lo) ./ hr
-    factors = ntuple(D) do k
-        f = k == d ? (@view w.factors[k][2:dims[k]]) : w.factors[k]
-        reshape(f, ntuple(j -> j == k ? length(f) : 1, D))
-    end
-    wfull = reduce((a, b) -> a .* b, factors)
+    factors = ntuple(k -> k == d ? (@view w.factors[k][2:dims[k]]) : w.factors[k], Val(D))
+    wfull = _outer_product(factors)
     return sum(wfull .* conj.(δ) .* δ)
 end
 

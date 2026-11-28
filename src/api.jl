@@ -20,7 +20,7 @@ public ka_device, ka_synchronize
 public PRECOMPILE_WORKLOAD
 
 # --- Domain & Geometry ---
-export box, interval, ×, ⋅, dim, boundary_symbols
+export box, interval, ×, dim, boundary_symbols
 export domain, markers, labels
 export polygon, levelset
 
@@ -59,7 +59,7 @@ public norm₊
 public weights, interpolation_matrix
 
 # --- Discrete Differential & Difference Operators ---
-export ∇ₕ
+export ∇ₕ, ⋅
 export divₕ, divₘₕ, curlₕ, Δₕ, εₕ
 export ∇̃ₕ, diṽₕ, curl̃ₕ
 export ∇cₕ, divcₕ, curlcₕ, εcₕ

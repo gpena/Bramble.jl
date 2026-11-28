@@ -47,37 +47,10 @@ Return the tuple of condition predicate markers associated with domain `Ω`.
 
 Return a tuple of the `Symbol` label of every marker in domain `Ω`.
 
-Zero-allocation; see [`label_identifiers`](@ref).
+Zero-allocation.
 """
 @inline labels(Ω::Domain) = labels(markers(Ω))
 
-"""
-    marker_identifiers(Ω::Domain) -> Tuple
-
-Return a tuple of the identifying symbols, symbol sets, predicate functions, polygons or
-level sets of all markers in domain `Ω`.
-
-The tuple lists the identifiers of [`symbols`](@ref), then [`tuples`](@ref), then
-[`conditions`](@ref), then the polygon and level-set markers. It is built as a
-compile-time-unrolled tuple, like [`label_identifiers`](@ref), so its type is concrete even
-when the kinds are mixed.
-
-!!! note
-    Building the tuple, like iterating [`symbols`](@ref), [`tuples`](@ref), or
-    [`conditions`](@ref) directly, or through
-    [`label_symbols`](@ref)/[`label_tuples`](@ref)/[`label_conditions`](@ref),
-    allocates 0 bytes.
-"""
-@inline function marker_identifiers(Ω::Domain)
-    return (
-        map(identifier, symbols(Ω))...,
-        map(identifier, tuples(Ω))...,
-        map(identifier, conditions(Ω))...,
-        map(identifier, regions(markers(Ω)))...
-    )
-end
-
-@inline label_identifiers(Ω::Domain) = label_identifiers(markers(Ω))
 @inline label_symbols(Ω::Domain) = label_symbols(markers(Ω))
 @inline label_tuples(Ω::Domain) = label_tuples(markers(Ω))
 @inline label_conditions(Ω::Domain) = label_conditions(markers(Ω))
@@ -160,15 +133,6 @@ Return the coordinate element type of [`Domain`](@ref) `Ω`.
 """
 @inline eltype(Ω::Domain) = eltype(set(Ω))
 @inline eltype(::Type{<:Domain{SetType}}) where {SetType} = eltype(SetType)
-
-"""
-    point_type(Ω::Domain) -> Type
-    point_type(::Type{<:Domain{SetType}}) -> Type
-
-Return the coordinate point representation type of [`Domain`](@ref) `Ω`.
-"""
-@inline point_type(Ω::Domain) = point_type(set(Ω))
-@inline point_type(::Type{<:Domain{SetType}}) where {SetType} = point_type(SetType)
 
 @inline Base.length(Ω::Domain) = length(markers(Ω))
 @inline Base.isempty(Ω::Domain) = isempty(markers(Ω))
@@ -254,12 +218,8 @@ function _show_domain_detailed(io::IO, Ω::Domain)
     pp = PrettyPrinter(io)
     X = set(Ω)
 
-    printstyled(io, "Domain"; bold = true, color = :cyan)
-    print(io, " {")
-    printstyled(io, "$(dim(Ω))D"; color = :yellow)
-    print(io, ", ")
-    printstyled(io, "$(eltype(Ω))"; color = :yellow)
-    println(io, "}:")
+    print_type_header(io, "Domain", dim(Ω), eltype(Ω))
+    println(io, ":")
 
     println(io)
     pp_indented = with_indent(pp, 1)

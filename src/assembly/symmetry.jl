@@ -186,7 +186,7 @@ _is_transposed_pair(p, q) = false
 _side_summands(op::OperatorAdd) = (_side_summands(op.left_op)..., _side_summands(op.right_op)...)
 _side_summands(op) = (op,)
 function _expand_product(p::BilinearProduct{D, K}) where {D, K}
-    return [BilinearProduct{D, K, typeof(l), typeof(r)}(p.inner, l, r)
+    return [BilinearProduct{D, K}(p.inner, l, r)
             for l in _side_summands(p.left_op) for r in _side_summands(p.right_op)]
 end
 
@@ -500,12 +500,8 @@ function Base.show(io::IO, ::MIME"text/plain", l::LinearForm{D}) where {D}
         pp = PrettyPrinter(io)
         Vₕ = test_space(l)
 
-        printstyled(io, "LinearForm"; bold = true, color = :cyan)
-        print(io, " {")
-        printstyled(io, "$(D)D"; color = :yellow)
-        print(io, ", ")
-        printstyled(io, "$(eltype(Vₕ))"; color = :yellow)
-        println(io, "}:")
+        print_type_header(io, "LinearForm", D, eltype(Vₕ))
+        println(io, ":")
 
         pp_indented = with_indent(pp, 1)
         print_key_value(pp_indented, "Test space", sprint(show, Vₕ); separator = ": ")
@@ -525,12 +521,8 @@ function Base.show(io::IO, ::MIME"text/plain", a::BilinearForm{D}) where {D}
         Uₕ = trial_space(a)
         Vₕ = test_space(a)
 
-        printstyled(io, "BilinearForm"; bold = true, color = :cyan)
-        print(io, " {")
-        printstyled(io, "$(D)D"; color = :yellow)
-        print(io, ", ")
-        printstyled(io, "$(eltype(Vₕ))"; color = :yellow)
-        println(io, "}:")
+        print_type_header(io, "BilinearForm", D, eltype(Vₕ))
+        println(io, ":")
 
         pp_indented = with_indent(pp, 1)
         print_key_value(pp_indented, "Trial space", sprint(show, Uₕ); separator = ": ")

@@ -402,6 +402,24 @@ end
     end
 end
 
+# `size(P, d)` comes from one method per abstract type (#1192), so every subtype has it.
+@testset "size(P, d) (#1192)" begin
+    Random.seed!(PC_SEED)
+    Ω = mesh(domain(interval(0.0, 1.0) × interval(0.0, 2.0)), (9, 11), (false, false))
+    build = W -> form(W, W, (u, v) -> innerₕ(u, v) + inner₊(∇ₕ(u), ∇ₕ(v)))
+    a = build(gridspace(Ω))
+    op = matrix_free_operator(a)
+    n = npoints(Ω)
+    objs = (op, jacobi_preconditioner(a), chebyshev_preconditioner(a), gmg_preconditioner(build, Ω),
+        jacobi_smoother(op), chebyshev_smoother(op), red_black_gauss_seidel(op))
+    for P in objs
+        @test size(P) == (n, n)
+        @test size(P, 1) == n
+        @test size(P, 2) == n
+        @test size(P, 3) == 1
+    end
+end
+
 # With the extension loaded, an argument it does not take (not an `AbstractMatrix`) must get
 # the unsupported-type error, as ILU's stubs give, not "requires AlgebraicMultigrid.jl".
 @testset "AMG stubs with the extension loaded" begin

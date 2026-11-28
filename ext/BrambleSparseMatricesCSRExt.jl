@@ -46,6 +46,7 @@ using Bramble:
                inner₊,
                ∇ₕ,
                boundary_symbols
+using LinearAlgebra: Factorization
 using SparseArrays: SparseArrays, SparseMatrixCSC
 using SparseMatricesCSR: SparseMatricesCSR, SparseMatrixCSR, sparsecsr
 using PrecompileTools: @setup_workload, @compile_workload
@@ -107,39 +108,17 @@ function Bramble._allocate_from_pattern(
 end
 
 # The row-major mirror of `_scatter_position(A::SparseMatrixCSC, row, col)`
-# (bilinear_traversal.jl): a linear scan of the row's segment when it holds few entries, a
-# binary search otherwise, relying on `SparseMatrixCSR`'s own invariant that `colval` is
-# sorted within each row (guaranteed by how `_allocate_from_pattern` above builds it, through
-# the same `sparse` combine-and-sort `SparseMatrixCSC` gets). The row bounds are converted
-# first, so the position is an `Int` for any index type.
+# (bilinear_traversal.jl): the same scan with row and column swapped, so it hands the
+# `rowptr`/`colval` pair to `Bramble._csc_position` instead of repeating it. That search
+# relies on `SparseMatrixCSR`'s own invariant that `colval` is sorted within each row
+# (guaranteed by how `_allocate_from_pattern` above builds it, through the same `sparse`
+# combine-and-sort `SparseMatrixCSC` gets). `_csc_position` reads its pointer array under
+# `@inbounds`, so the two `rowptr` bounds are checked here first. The position is an `Int`
+# for any index type.
 @inline function Bramble._scatter_position(A::SparseMatrixCSR{1}, row::Int, col::Int)
     rowptr = A.rowptr
-    colval = A.colval
-    p1 = Int(rowptr[row])
-    p2 = Int(rowptr[row + 1]) - 1
-
-    if (p2 - p1) < 32
-        idx = p1
-        @inbounds while idx <= p2
-            colval[idx] == col && return idx
-            idx += 1
-        end
-    else
-        lo = p1
-        hi = p2
-        @inbounds while lo <= hi
-            mid = (lo + hi) >>> 1
-            mid_col = colval[mid]
-            if mid_col < col
-                lo = mid + 1
-            elseif mid_col > col
-                hi = mid - 1
-            else
-                return mid
-            end
-        end
-    end
-    return 0
+    checkbounds(rowptr, row:(row + 1))
+    return Bramble._csc_position(rowptr, A.colval, col, row)
 end
 
 @inline function Bramble._scatter_add!(A::SparseMatrixCSR{1}, pos::Integer, val)
@@ -159,9 +138,43 @@ end
 
 # --- the ODE handoff (semidiscrete.jl) ---------------------------------------------- #
 
-# `Bramble._csr_to_csc` is the O(nnz) triplet re-layout `sparse_factorize` already uses; it
+# `_csr_to_csc` is the O(nnz) triplet re-layout every solver entry point below uses; it
 # reads the index base off `rowptr`, so a zero-based matrix converts too.
-@inline Bramble._ode_storage(A::SparseMatrixCSR) = Bramble._csr_to_csc(A)
+function _csr_to_csc(A::SparseMatrixCSR)
+    m, n = size(A)
+    rowptr, colval, nzval = A.rowptr, A.colval, A.nzval
+    # a zero-based `sparsecsr(Val(0), ...)` stores `rowptr` and `colval` from 0: read the
+    # base off the data and shift both to one-based (`o == 0` for the usual one-based case)
+    o = 1 - Int(rowptr[1])
+    I = Vector{Int}(undef, length(nzval))
+    @inbounds for i in 1:m, k in (rowptr[i] + o):(rowptr[i + 1] + o - 1)
+
+        I[k] = i
+    end
+    return SparseArrays.sparse(I, o == 0 ? colval : colval .+ o, nzval, m, n)
+end
+
+@inline Bramble._ode_storage(A::SparseMatrixCSR) = _csr_to_csc(A)
+
+# --- the direct solvers ------------------------------------------------------------- #
+
+# No backend solves a CSR matrix natively, so each entry point converts and delegates to
+# its `SparseMatrixCSC` method. `accelerate_factorize` needs its own method: without it a
+# raw CSR matrix lands on the dense `AbstractMatrix` method and factors densely.
+Bramble._as_csc(A::SparseMatrixCSR) = _csr_to_csc(A)
+Bramble._rank_one_sparse(A::SparseMatrixCSR) = _csr_to_csc(A)
+function Bramble.pde_solve(A::SparseMatrixCSR, F::AbstractVector; kwargs...)
+    return Bramble.pde_solve(_csr_to_csc(A), F; kwargs...)
+end
+function Bramble.sparse_factorize(A::SparseMatrixCSR; kwargs...)
+    return Bramble.sparse_factorize(_csr_to_csc(A); kwargs...)
+end
+function Bramble.refactor!(fact::Factorization, A::SparseMatrixCSR)
+    return Bramble.refactor!(fact, _csr_to_csc(A))
+end
+function Bramble.accelerate_factorize(A::SparseMatrixCSR; kwargs...)
+    return Bramble.accelerate_factorize(_csr_to_csc(A); kwargs...)
+end
 
 # `-A` into the CSC Jacobian `_ode_storage` built from `A`. Same pattern, so each stored
 # entry of `A` is found in its column of `J` by a binary search and the whole fill is

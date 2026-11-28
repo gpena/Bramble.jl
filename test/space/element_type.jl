@@ -9,6 +9,8 @@ using Bramble: norminf, spacings
 import Bramble: diff₋ₓ, diff₊ₓ, D₊ₓ, ∇₊ₕ, M₊ₓ, M₊ᵧ
 using SparseArrays
 using ForwardDiff
+include("kronecker_oracle.jl")
+using .KroneckerOracle: kronecker_operator_matrix
 using Polyester: @batch
 using Bramble: CpuSerial, CpuThreaded, CpuPolyester
 using Bramble: divₕ, div₊ₕ, divcₕ, diṽₕ, div̽ₕ, curlₕ, curl₊ₕ, curlcₕ, curl̃ₕ, curl̽ₕ
@@ -25,9 +27,9 @@ using Bramble: hₘᵢₙ, diff₋ₓ, diff₊ₓ, half_spacings, cell_measures
 #
 # A single Float64 literal anywhere in a formula silently promotes whatever it touches,
 # and the promotion is invisible in a Float64 run, which is every other test in this
-# suite. `add_half_shift` multiplied by `0.5` and returned Float64 averaging matrices
-# while the rest of the library stayed Float32; nothing failed, the numbers were simply
-# in the wrong type. These tests are what makes that visible.
+# suite. `add_half_shift` once multiplied by `0.5` and returned Float64 averaging
+# matrices while the rest of the library stayed Float32; nothing failed, the numbers were
+# simply in the wrong type. These tests are what makes that visible.
 
 const F32_BACKEND = backend(;
     vector_type = Vector{Float32}, matrix_type = SparseMatrixCSC{Float32, Int}
@@ -122,6 +124,12 @@ const F32_BACKEND = backend(;
 
         for op in (D₋ₓ, D₊ₓ, diff₋ₓ, diff₊ₓ, jumpₓ, Mₓ, M₊ₓ, Mᵧ, M₊ᵧ)
             @test eltype(op(Ωₕ)) === Float32
+        end
+
+        # The Kronecker oracle divides by 2 and 4 rather than multiplying by a Float64
+        # literal, so its averaging matrices stay Float32 too.
+        for op in (Mₓ, M₊ₓ, Mᵧ, M₊ᵧ, Dcₓ)
+            @test eltype(kronecker_operator_matrix(Ωₕ, op)) === Float32
         end
     end
 

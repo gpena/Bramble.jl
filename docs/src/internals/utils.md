@@ -70,10 +70,10 @@ Public = false
 Pages = ["utils/device_kernels.jl", ]
 ```
 
-## Macros
+## Pretty printing
 
 ```@autodocs
 Modules = [Bramble]
 Public = false
-Pages = ["utils/macros.jl", ]
+Pages = ["utils/pretty_print.jl", ]
 ```

@@ -77,5 +77,5 @@ as nodes: a space with ghosts is built from the physical mesh with
 ```@autodocs
 Modules = [Bramble]
 Public = false
-Pages = ["mesh/interface.jl", "mesh/indices.jl", "mesh/constructors.jl", "mesh/queries.jl", "mesh/marker.jl", "mesh/mesh1d.jl", "mesh/meshnd.jl", "mesh/pretty_print.jl"]
+Pages = ["mesh/interface.jl", "mesh/indices.jl", "mesh/constructors.jl", "mesh/queries.jl", "mesh/marker.jl", "mesh/mesh1d.jl", "mesh/meshnd.jl", "mesh/ghost_mesh.jl", "mesh/levelset_class.jl", "mesh/levelset_grid.jl", "mesh/pretty_print.jl"]
 ```

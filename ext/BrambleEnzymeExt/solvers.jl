@@ -680,7 +680,7 @@ EnzymeRules.inactive_kwarg(::typeof(Bramble.gmg_solve), build, Ωₕ, b; kwargs.
 
 # The preconditioner and the loop's arguments, with `gmg_solve`'s own keywords and checks.
 function _gmg_rule_setup(build, Ωₕ; levels = nothing, cycle::Symbol = :V, ν₁::Integer = 2,
-        ν₂::Integer = 2, smoother = Bramble._gmg_default_smoother, tol = nothing,
+        ν₂::Integer = 2, smoother = Bramble.chebyshev_smoother, tol = nothing,
         maxiters::Integer = 100)
     (tol === nothing || (tol isa Real && tol > 0)) ||
         throw(ArgumentError("gmg_solve needs tol > 0, got $tol"))

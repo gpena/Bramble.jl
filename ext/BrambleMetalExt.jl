@@ -34,30 +34,14 @@ end
 ka_device(::Backend{<:MtlVector, MT, EP}) where {MT, EP} = MetalBackend()
 
 # ---------------------------------------------------------------------------
-# locality. The storage-locality trait
-# ---------------------------------------------------------------------------
-#
-# Locality is derived from storage, not from a caller's intent: an array living in Metal
-# device memory answers `DeviceLocality()`, overriding the `HostLocality()` fallback in
-# src/utils/backend.jl. The generic `AbstractGPUArray` method there already answers
-# `DeviceLocality()` for `MtlVector`/`MtlMatrix`, so these two are redundant;
-# the sparse-type methods below are kept for the types it does not cover.
-
-Bramble.locality(::Type{<:MtlVector}) = Bramble.DeviceLocality()
-Bramble.locality(::Type{<:MtlMatrix}) = Bramble.DeviceLocality()
-
-# ---------------------------------------------------------------------------
 # _gpu_functional. The loaded-and-functional predicate gpu_backend needs
 # ---------------------------------------------------------------------------
 #
-# More specific than the `::Val` stub in `src/utils/backend.jl` (this one matches only
-# `Val(:metal)`), so this is an added method, not an overwrite of the stub.
+# Only the device's own answer: `gpu_backend` checks the test override before it asks. The
+# `::Val{:metal}` signature is more specific than the `::Val` stub in `src/utils/backend.jl`,
+# so this is an added method, not an overwrite of the stub.
 
-function Bramble._gpu_functional(::Val{:metal})
-    override = Bramble._gpu_functional_override[]
-    override !== nothing && return override
-    return Metal.functional()
-end
+Bramble._gpu_functional(::Val{:metal}) = Metal.functional()
 
 # ---------------------------------------------------------------------------
 # profile_backends. The `GpuKernel` row
@@ -75,19 +59,7 @@ Bramble._profile_eltype(::Bramble.GpuKernel) = Float32
 
 function Bramble._profile_time(policy::Bramble.GpuKernel, ::Type{T},
         n::Integer) where {T <: AbstractFloat}
-    v = MtlVector{T}(undef, n)
-    k = Bramble._ProfileKernel(T(1), T(0.5))
-    idxs = 1:n
-    Bramble._sweep_for!(policy, v, idxs, k)
-    Metal.synchronize()
-    best = typemax(UInt64)
-    for _ in 1:3
-        t0 = time_ns()
-        Bramble._sweep_for!(policy, v, idxs, k)
-        Metal.synchronize()
-        best = min(best, time_ns() - t0)
-    end
-    return Float64(best) * 1.0e-9
+    return Bramble._profile_sweeps(policy, MtlVector{T}, T, n, Metal.synchronize)
 end
 
 Bramble._profile_label(::Bramble.GpuKernel) = "GpuKernel()"
@@ -230,9 +202,11 @@ end
 # locality for the device sparse types
 # ---------------------------------------------------------------------------
 #
-# Same rule as MtlVector/MtlMatrix above -- locality is derived from storage, and these are
-# device storage too, whether the name above resolved to the upstream Metal.jl type or to
-# the Bramble-owned placeholder.
+# Locality is derived from storage. `MtlVector` and `MtlMatrix` subtype `AbstractGPUArray`,
+# so the generic method in src/utils/backend.jl answers `DeviceLocality()` for them and the
+# extension adds none. These sparse types are not `AbstractGPUArray`, so they need their own,
+# whether the name above resolved to the upstream Metal.jl type or to the Bramble-owned
+# placeholder.
 
 Bramble.locality(::Type{<:MetalSparseMatrixCSR}) = Bramble.DeviceLocality()
 Bramble.locality(::Type{<:MetalSparseMatrixCSC}) = Bramble.DeviceLocality()

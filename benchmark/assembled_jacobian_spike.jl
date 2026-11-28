@@ -38,7 +38,7 @@
 # m = 100, 300, 700 (an m × (m+3) mesh) unless sizes follow `--time`. `--smoke` runs m = 40
 # once. A child needs about 7.6 GB at m = 700; m = 1000 under CpuThreaded passed the 10 GB cap.
 #
-# Uses internal names (`local_stencil`, `_rebuilt_around`, `TappedNode`, the node structs):
+# Uses internal names (`local_stencil`, `_rewrap_value`, `TappedNode`, the node structs):
 # a prototype, so it reaches past the public API on purpose.
 
 module AssembledJacobianSpike
@@ -47,7 +47,7 @@ using Bramble
 using Bramble: allocate_system_matrix, D₊ₓ, D₊ᵧ, S₊ₓ, ast_sparsity_detector, type_cached_assemble!,
                local_stencil, markers, indices, Mₓ!, Mᵧ!, LazyOp, OperatorAdd,
                OperatorScale, GridFunctionScale, BilinearProduct, TrialFunction,
-               TappedNode, _rebuilt_around, CpuSerial, CpuThreaded
+               TappedNode, _rewrap_value, CpuSerial, CpuThreaded
 using DifferentiationInterface: DifferentiationInterface, AutoSparse, AutoForwardDiff,
                                 prepare_jacobian
 using ForwardDiff: ForwardDiff
@@ -132,7 +132,7 @@ end
 # Differences, averages and jumps: linear, so the rule rebuilds the node around d.
 function _dterm(op::TappedNode, w::_Walk)
     d = _dterm(op.inner_op, w)
-    return d === nothing ? nothing : _rebuilt_around(op, d)
+    return d === nothing ? nothing : _rewrap_value(op, d)
 end
 
 function _dterm(op::BilinearProduct{D, W}, w::_Walk) where {D, W}
@@ -140,7 +140,7 @@ function _dterm(op::BilinearProduct{D, W}, w::_Walk) where {D, W}
         throw(MissingJacobianRule(:BilinearProduct, "coefficient on the test side"))
     d = _dterm(op.left_op, w)
     d === nothing && return nothing
-    return BilinearProduct{D, W, typeof(d), typeof(op.right_op)}(op.inner, d, op.right_op)
+    return BilinearProduct{D, W}(op.inner, d, op.right_op)
 end
 
 # The product rule: δ(c ⊙ T(u)) = (f′(L u) ⊙ T(u)) ⊙ L(δu) + c ⊙ T(δu).

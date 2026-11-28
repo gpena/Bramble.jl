@@ -5,14 +5,16 @@ using Bramble
 using ExplicitImports
 using Polyester: Polyester
 using Kronecker: Kronecker
+using SparseMatricesCSR: SparseMatricesCSR
 
 # What Bramble and its extensions take from other modules, and how.
 #
 # The package already writes every import as `using X: a, b` rather than bare `using X`, and
 # already has none unused -- so this file is a ratchet, not a cleanup: it fails when a new
 # import drifts from that, not today. Coverage depends on which extensions are loaded when
-# this runs. `BramblePolyesterExt` and `BrambleKroneckerExt` are always checked: this file
-# loads `Polyester` and `Kronecker` itself, then asserts both extensions are there.
+# this runs. `BramblePolyesterExt`, `BrambleKroneckerExt` and
+# `BrambleSparseMatricesCSRExt` are always checked: this file loads `Polyester`, `Kronecker`
+# and `SparseMatricesCSR` itself, then asserts the three extensions are there.
 # `test/utils/backends.jl` loads Metal incidentally on Apple Silicon even in the unit group,
 # so `BrambleMetalExt` is usually checked too; the rest are reached only when the "ext"/"full" group has loaded
 # their triggers earlier in the same process. Every ignore entry below was verified against
@@ -26,11 +28,12 @@ using Kronecker: Kronecker
 # up in no test. Both are unconditional: nothing here is a deliberately-kept exception.
 
 @testset "Explicit imports" begin
-    # The two lines above load the triggers; this fails the file if either extension is still
+    # The `using` lines above load the triggers; this fails the file if an extension is still
     # not there, so the checks below can never pass vacuously for them.
-    @testset "Polyester and Kronecker are loaded" begin
+    @testset "Extension triggers are loaded" begin
         @test Base.get_extension(Bramble, :BramblePolyesterExt) !== nothing
         @test Base.get_extension(Bramble, :BrambleKroneckerExt) !== nothing
+        @test Base.get_extension(Bramble, :BrambleSparseMatricesCSRExt) !== nothing
     end
 
     @testset "No implicit or stale imports" begin
@@ -299,8 +302,7 @@ using Kronecker: Kronecker
 
     # `VectorElement` is an `AbstractVector` and `ScalarGridSpace` hands out reshaped views,
     # so the broadcasting and array internals below have to be reached by name -- Base
-    # exposes no public spelling for any of them. `eval` is `Core.eval`, reached by the
-    # `@forward` macro.
+    # exposes no public spelling for any of them.
     #
     # The rest are extension methods added to a function that is not itself exported by the
     # module supplying it, the same idiom as `Base.show`/`Base.size` above:
@@ -422,6 +424,17 @@ using Kronecker: Kronecker
                 :_scatter_storage,
                 :_scatter_add!,
                 :_zero_stored!,
+                # `_csc_position`, `_rank_one_sparse`, `accelerate_factorize`,
+                # `_check_symmetrize_square`, `_negate_into!`, `_negate_into_generic!`
+                # (BrambleSparseMatricesCSRExt): the CSC helpers it reuses on a CSR matrix
+                # (position search, rank-one conversion, factorization entry, symmetrize
+                # check, negation and its generic fallback). None is public.
+                :_csc_position,
+                :_rank_one_sparse,
+                :accelerate_factorize,
+                :_check_symmetrize_square,
+                :_negate_into!,
+                :_negate_into_generic!,
                 # `_batch_for!`, `_batch_axis_for!`, `_batch_scatter_for!`, `_batch_dot`,
                 # `_batch_dot_masked`, `_batch_linear_colour_sweep!`,
                 # `_batch_linear_band_sweep!`: the
@@ -539,7 +552,6 @@ using Kronecker: Kronecker
                 # `@batch` loop as a raw pointer view.
                 :ReshapedArray,
                 :SizeUnknown,
-                :eval,
                 :mightalias,
                 # `broadcasted` (src/space/vectorelement.jl:510): the customization hook for
                 # `copyto!(dest::VectorElement, src::VectorElement)`.
@@ -633,13 +645,25 @@ using Kronecker: Kronecker
                 :suitesparse_refactor!,
                 :_suitesparse_solve,
                 :_mf_data,
+                # `_check_rhs`, `_check_refactor_size`, `_form_solve`, `_release!`,
+                # `_require_macos` (BrambleSuiteSparseExt, BrambleAppleAccelerateExt,
+                # BrambleMUMPSExt, BrambleSparspakExt): the length and size checks, the
+                # solve entry and its release hook the four sparse backends share, and the
+                # macOS refusal of the Accelerate stubs. None is public.
+                :_check_rhs,
+                :_check_refactor_size,
+                :_form_solve,
+                :_release!,
+                :_require_macos,
                 # BrambleMetalExt reaching into Bramble's own internals:
                 # `_gpu_functional` is the loaded-and-functional predicate `gpu_backend`
                 # dispatches on by `Val`, more specific than the stub in `src/utils/backend.jl`
-                # and not itself public. `_gpu_functional_override` is the
-                # `Ref` test hook `_gpu_functional` reads to fake device (un)availability
-                # without redefining the method; the extension reads the same `Ref` so a test
-                # can force GPU-unavailable behaviour through it too. Neither is public.
+                # and not itself public. The `_profile_*` names are the `profile_backends`
+                # extension point (`src/utils/backend_profile.jl`) the `GpuKernel` row
+                # fills in: `_profile_available`, `_profile_eltype`, `_profile_label`,
+                # `_profile_spelling`, `_profile_time`, and `_profile_sweeps`, the timing
+                # loop its `_profile_time` hands the device vector type and `synchronize`
+                # to. None is public.
                 # `metal_sparse_csr`/`metal_sparse_csc` carry docstrings
                 # on their `src/utils/backend.jl` stubs, but neither is exported nor declared
                 # `public` in `src/Bramble.jl`, nor documented in `docs/src/api/` -- so today
@@ -649,7 +673,12 @@ using Kronecker: Kronecker
                 # builds the host-side CSR arrays it hands to `metal_sparse_csr` -- the same
                 # combiner `SparseMatrixCSC`'s own method already reaches for by the same name.
                 :_gpu_functional,
-                :_gpu_functional_override,
+                :_profile_available,
+                :_profile_eltype,
+                :_profile_label,
+                :_profile_spelling,
+                :_profile_time,
+                :_profile_sweeps,
                 :metal_sparse_csr,
                 :metal_sparse_csc,
                 Symbol("sparse!"),
@@ -718,11 +747,8 @@ using Kronecker: Kronecker
         ) === nothing
     end
 
-    # `@forward VectorElement.data (Base.size, Bramble.show)` and
-    # `@forward VectorElement.space (Bramble.mesh,)` name the function they extend in full,
-    # which is what the macro takes; unqualified would be a different binding.
     @testset "Self-qualified accesses declared" begin
-        @test check_no_self_qualified_accesses(Bramble; ignore = (:mesh, :show)) === nothing
+        @test check_no_self_qualified_accesses(Bramble) === nothing
     end
 end
 

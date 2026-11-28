@@ -149,38 +149,34 @@ function chebyshev_preconditioner(
         op::_AnyMatrixFreeOperator{T}; degree::Integer = 4, λmax = nothing, ratio::Real = 30
 ) where {T}
     n = size(op, 1)
-    n == size(op, 2) || _throw_chebyshev_nonsquare(op)
+    n == size(op, 2) || _throw_nonsquare("Chebyshev preconditioning needs a square operator", op)
     degree >= 1 || throw(ArgumentError("chebyshev_preconditioner needs degree >= 1, got $degree"))
     ratio > 1 || throw(ArgumentError("chebyshev_preconditioner needs ratio > 1, got $ratio"))
-    J = jacobi_preconditioner(op)
-    λ = λmax === nothing ? max_eigenvalue_estimate(op; preconditioner = J) : T(λmax)
-    (isfinite(λ) && λ > 0) || throw(ArgumentError(
-        λmax === nothing ?
-        "chebyshev_preconditioner: the λmax estimate $λ is not finite and positive: " *
-        "the form's diagonal has a zero or the form is not SPD" :
-        "chebyshev_preconditioner needs a finite λmax > 0, got $λ"
-    ))
+    J, λ = _chebyshev_lambda_max(op, λmax, "chebyshev_preconditioner")
     return ChebyshevPreconditioner{T, typeof(op), Vector{T}}(
         op, J.inv_diagonal, λ / T(ratio), λ, Int(degree), zeros(T, n), zeros(T, n)
     )
 end
 
-@noinline function _throw_chebyshev_nonsquare(op)
-    throw(DimensionMismatch("Chebyshev preconditioning needs a square operator, got $(size(op))"))
-end
-
-@noinline function _throw_chebyshev_dimmismatch(P, x, y)
-    throw(
-        DimensionMismatch(
-        "ChebyshevPreconditioner of size $(size(P)) cannot divide a vector of length " *
-        "$(length(x)) into one of length $(length(y))",
-    ),
-    )
+# The Jacobi preconditioner of `op` and the largest eigenvalue `λ` of `D⁻¹A` Chebyshev
+# smooths against: `λmax` when given, else the power-iteration estimate. `fname` names the
+# caller in the error for a `λ` that is not finite and positive.
+function _chebyshev_lambda_max(op::_AnyMatrixFreeOperator{T}, λmax, fname::String) where {T}
+    J = jacobi_preconditioner(op)
+    λ = λmax === nothing ? max_eigenvalue_estimate(op; preconditioner = J) : T(λmax)
+    (isfinite(λ) && λ > 0) || throw(ArgumentError(
+        λmax === nothing ?
+        "$fname: the λmax estimate $λ is not finite and positive: " *
+        "the form's diagonal has a zero or the form is not SPD" :
+        "$fname needs a finite λmax > 0, got $λ"
+    ))
+    return J, λ
 end
 
 function ldiv!(y::AbstractVector, P::ChebyshevPreconditioner, x::AbstractVector)
     n = length(P.r)
-    (length(x) == n && length(y) == n) || _throw_chebyshev_dimmismatch(P, x, y)
+    (length(x) == n && length(y) == n) ||
+        _throw_dimmismatch(P, x, y, "cannot divide a vector of length", "into one of length")
     _ldiv_by_parts(P, y, x) && return _ldiv_by_parts!(y, P, x)
     yd = _mf_data(y)
     xd = _mf_data(x)
@@ -282,7 +278,7 @@ function max_eigenvalue_estimate(
         op::_AnyMatrixFreeOperator{T}; iterations::Integer = 20, preconditioner = nothing
 ) where {T}
     n = size(op, 1)
-    n == size(op, 2) || _throw_chebyshev_nonsquare(op)
+    n == size(op, 2) || _throw_nonsquare("Chebyshev preconditioning needs a square operator", op)
     iterations >= 1 ||
         throw(ArgumentError("max_eigenvalue_estimate needs iterations >= 1, got $iterations"))
     v = zeros(T, n)

@@ -422,13 +422,7 @@ using ..TestUtils: _backward_spacing_oracle, _half_spacing_oracle
 end
 
 @testset "Awkward grid weights" begin
-    # space_weights has a one-dimensional method, because two of the four full-length
-    # vectors the general method builds are dead there: the transverse factor is never
-    # selected when there is no transverse direction, and the product over a single
-    # factor is a copy.
-    #
-    # These assert the weights against the mesh rather than against the general method,
-    # so they hold whichever method produces them. The grids are chosen rather than drawn
+    # These assert the weights against the mesh. The grids are chosen rather than drawn
     # so the spacing ratio is genuinely extreme; `mesh(Ω, n, false)` gives a random grid,
     # which is not.
     import Bramble: Innerh, Innerplus, set_points!

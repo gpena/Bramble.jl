@@ -6,7 +6,7 @@
 #
 # src/utils/device_kernels.jl and src/solvers/accelerate_solver.jl are deliberately not
 # listed as files. Their generic fallbacks and macOS paths run on the macOS coverage legs, so
-# they stay measured. The off-macOS throws of accelerate_solver.jl are the one exception.
+# they stay measured. The off-macOS throw of `_require_macos` (sparse_solvers.jl) is the one exception.
 #
 # This is a separate file, rather than more codecov.yml ignores, so that Codecov still shows
 # these files and the list can be reviewed on its own.
@@ -50,18 +50,13 @@ functions = ["_kron_device_vector", "_kron_device_index", "_throw_kron_device_en
 reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
 
 [[exempt_function]]
-path = "src/assembly/linear.jl"
-functions = ["_assemble_linear_device!"]
-reason = "device-only: runs only on device-resident (Metal) data; no Metal backend is in the test environment."
-
-[[exempt_function]]
 path = "src/mesh/mesh1d.jl"
 functions = ["_throw_no_ka_mesh_kernel", "_launch_uniform_mesh1d_init!", "_launch_half_points!", "_launch_spacing!", "_launch_half_spacing!", "_launch_nonuniform_mesh1d_metrics!", "_launch_refine_indices!"]
 reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
 
 [[exempt_function]]
 path = "src/operators/average.jl"
-functions = ["_throw_no_ka_average_kernel", "_launch_average_engine!", "_throw_no_device_centered_average", "_device_average_weights!"]
+functions = ["_launch_average_engine!"]
 reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
 
 [[exempt_function]]
@@ -71,7 +66,7 @@ reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbst
 
 [[exempt_function]]
 path = "src/operators/difference.jl"
-functions = ["_resolve_device_spacing", "_throw_no_ka_stencil_kernel", "_launch_difference_onesided!", "_launch_difference_centered!", "_launch_stencil_engine!"]
+functions = ["_resolve_device_spacing", "_launch_difference_onesided!", "_launch_difference_centered!", "_launch_stencil_engine!"]
 reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
 
 [[exempt_function]]
@@ -81,7 +76,7 @@ reason = "device-only: runs only on device-resident (Metal) data; no Metal backe
 
 [[exempt_function]]
 path = "src/operators/restriction.jl"
-functions = ["_throw_no_ka_projection_kernel", "_launch_restriction!", "_launch_restriction_scatter!", "_launch_restriction_nd!", "_launch_restriction_scatter_nd!", "_device_project!", "_device_scatter_project!"]
+functions = ["_no_ka_error", "_launch_restriction!", "_launch_restriction_scatter!", "_launch_restriction_nd!", "_launch_restriction_scatter_nd!", "_device_project!", "_device_scatter_project!"]
 reason = "device-only: launches a KernelAbstractions kernel or its no-KernelAbstractions fallback, reached only with a device backend; no KernelAbstractions or Metal backend is in the test environment."
 
 [[exempt_function]]
@@ -124,9 +119,6 @@ reason = "device-only: each is the non-Array method a host Array never dispatche
 path = "src/mesh/mesh1d.jl"
 methods = [
     "_point(::DeviceLocality",
-    "_host_points(::DeviceLocality",
-    "_host_spacings(::DeviceLocality",
-    "_host_half_spacings(::DeviceLocality",
     "_throw_no_scalar_point()",
 ]
 reason = "device-only: the ::DeviceLocality methods take device-resident storage (the HostLocality method serves every host mesh), and _throw_no_scalar_point is called only by the device _point; no device array is in the test environment."
@@ -149,12 +141,8 @@ reason = "device-only: the ::DeviceLocality method fills device-resident compone
 
 [[exempt_function]]
 path = "src/operators/projection.jl"
-methods = [
-    "_device_project!(::DeviceLocality",
-    "_device_scatter_project!(::DeviceLocality",
-    "_marker_index_list(like::AbstractArray",
-]
-reason = "device-only: the ::DeviceLocality defaults answer only for device-resident storage, and _marker_index_list is called only by the device masked projection (_device_masked_project!)."
+methods = ["_marker_index_list(like::AbstractArray"]
+reason = "device-only: _marker_index_list is called only by the device masked projection (_device_masked_project!)."
 
 [[exempt_function]]
 path = "src/operators/restriction.jl"
@@ -162,10 +150,14 @@ methods = ["_probe_point_value(pts::AbstractVector"]
 reason = "device-only: the non-Array method of the probe, reached only when points(Ωₕ) is device-resident; a host mesh's Array takes the _probe_point_value(::Array, ...) method."
 
 [[exempt_function]]
+path = "src/utils/device_kernels.jl"
+methods = ["_host_array(::DeviceLocality, v::AbstractArray"]
+reason = "device-only: the ::DeviceLocality method takes device-resident storage (the HostLocality method serves every host array); no device array is in the test environment."
+
+[[exempt_function]]
 path = "src/assembly/linear.jl"
 methods = [
-    "_host_sources(::DeviceLocality",
-    "_host_array(::DeviceLocality, v::AbstractArray",
+    "_assemble_linear!(::DeviceLocality",
     "_host_array(::DeviceLocality, v::VectorElement",
     "_assemble_linear_parallel!(::DeviceLocality",
     "_host_sources(op::SourceVector",
@@ -174,7 +166,7 @@ methods = [
     "_host_sources(op::OperatorAdd",
     "_host_sources(op::LinearProduct",
 ]
-reason = "device-only: the ::DeviceLocality methods take device-resident storage, and the _host_sources(op::...) walk is called only from the device assembly paths (_assemble_linear_device!, _assemble_linear_parallel!(::DeviceLocality), _assemble_add_linear!(::DeviceLocality)) to copy device data to the host."
+reason = "device-only: the ::DeviceLocality methods take device-resident storage, and the _host_sources(op::...) walk is called only from the device assembly paths (_assemble_linear!(::DeviceLocality), _assemble_linear_parallel!(::DeviceLocality), _assemble_add_linear!(::DeviceLocality)) to copy device data to the host."
 
 [[exempt_function]]
 path = "src/assembly/assemble_add.jl"
@@ -258,26 +250,11 @@ reason = "device-only: the locality of a GPUArrays array type, reached only for 
 [[exempt_function]]
 path = "src/assembly/stencil_eval.jl"
 methods = [
-    "is_symbolic(::TrialFunction) = true",
-    "is_symbolic(::TestFunction) = true",
-    "is_symbolic(::IndexedTrialFunction) = true",
-    "is_symbolic(::IndexedTestFunction) = true",
-    "is_symbolic(::SourceFunction) = true",
-    "is_symbolic(::SourceVector) = true",
-    "is_symbolic(::SourceConstant) = true",
-    "is_symbolic(::DiracSource) = true",
-    "is_symbolic(op::BilinearProduct) = true",
-    "is_symbolic(op::LinearProduct) = true",
-    "_is_source_only(::TrialFunction) = false",
-    "_is_source_only(::TestFunction) = false",
-    "_is_source_only(::IndexedTrialFunction) = false",
-    "_is_source_only(::IndexedTestFunction) = false",
+    "is_symbolic(::_SymbolicNode) = true",
     "_is_source_only(::SourceFunction) = true",
     "_is_source_only(::SourceVector) = true",
     "_is_source_only(::SourceConstant) = true",
     "_is_source_only(::DiracSource) = true",
-    "_is_source_only(::BilinearProduct) = false",
-    "_is_source_only(::LinearProduct) = false",
     "_is_source_only(::LazyOp) = false",
 ]
 reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; a test calls each (test/form/bilinear.jl, test/form/common.jl, test/form/interpolation.jl, test/form/semidiscrete.jl)"
@@ -309,12 +286,8 @@ methods = ["_in_any_marker(::Tuple{}, i) = false"]
 reason = "uncounted: Julia's line table has no counter for a one-line inlined method returning a constant; it ends the marker recursion of every host masked projection at an entry outside all markers (test/space/vector_elements.jl, Rₕ! with markers)"
 
 [[exempt_function]]
-path = "src/solvers/accelerate_solver.jl"
+path = "src/solvers/sparse_solvers.jl"
 lines = [
-    { method = "accelerate_factorize(A::SparseMatrixCSC; kwargs...)", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
-    { method = "accelerate_factorize(a::BilinearForm", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
-    { method = "accelerate_solve(A::SparseMatrixCSC, F::AbstractVector; kwargs...)", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
-    { method = "accelerate_solve(a::BilinearForm", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
-    { method = "accelerate_refactor!(::AccelerateFactorization, A)", text = 'throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
+    { method = "_require_macos()", text = 'Sys.isapple() || throw(ArgumentError("AppleAccelerate is only supported on macOS (darwin)."))' },
 ]
 reason = "os-specific: runs only off macOS, behind the !Sys.isapple() guard; every coverage leg runs macOS-latest"

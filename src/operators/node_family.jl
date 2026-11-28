@@ -211,10 +211,9 @@ Keywords, all optional except `node`, `stem` and `what`:
 | `dispatch_alias` | the name carrying `f(op, ::Val{Dim})`; defaults to `stem` |
 | `vectorial_alias` | the tuple-valued alias over every coordinate, e.g. `∇ₕ` |
 | `componentwise` | `true` adds `alias(ops::Tuple)`; only the two gradients use it |
-| `resolve` | `false` skips the generated `resolve_ast`, for a node that writes its own |
 
-`_bind_interp_spaces` is generated unconditionally: it is the same rebuild as `resolve_ast`,
-and a family that opts out of the latter still has to pass a bound operand through.
+`_bind_interp_spaces` is generated beside `resolve_ast`: it is the same rebuild with the
+bound operand inside.
 
 The space-layer counterpart is `@operator_family` in `operators/stencil.jl`, and the
 generators it shares -- `_relocate!` for line attribution, and `_BRAMBLE_var2symbol` /
@@ -268,8 +267,7 @@ macro node_family(kwargs...)
         )
     end
 
-    get(opts, :resolve, true) === false ||
-        push!(exprs, _node_resolve_expr(node_name; source = __source__))
+    push!(exprs, _node_resolve_expr(node_name; source = __source__))
 
     push!(exprs, _node_bind_expr(node_name; source = __source__))
 

@@ -175,6 +175,12 @@ end
         @test collect(u) == collect(1.0:4.0)
     end
 
+    @testset "mesh of an element" begin
+        u = element(W, 1.0:4.0)
+        @test mesh(u) === mesh(space(u))
+        @test @inferred(mesh(u)) === mesh(W)
+    end
+
     @testset "ndims" begin
         @test ndims(VectorElement) == 1
         u = element(W)
@@ -433,7 +439,7 @@ end
 
         # Test similar for broadcast result
         bc = Base.broadcasted(+, u, v)
-        s = similar(bc)
+        s = similar(bc, Float64)
         @test s isa VectorElement
         @test space(s) === space(u)
         @test length(s) == length(u)
@@ -1209,7 +1215,7 @@ end
 end
 
 @testset "Tuple arithmetic" begin
-    import Bramble: space_type, _find_vec_in_broadcast, _gauss_rule, VectorElement
+    import Bramble: _find_vec_in_broadcast, _gauss_rule, VectorElement
 
     Ωₕ = mesh(domain(interval(0.0, 1.0)), 6, true)
     W = gridspace(Ωₕ)
@@ -1267,11 +1273,6 @@ end
         @test eltype(parent(Rₕ(V, x -> (1.0, 2.0)))) === Float64
         @test eltype(parent(Rₕ(V, x -> (1, 2)))) === Float64      # promoted against the space
         @test parent(Rₕ(V, x -> (1.0, 2))) == parent(Rₕ(V, x -> (1.0, 2.0)))
-    end
-
-    @testset "space_type" begin
-        u = element(W)
-        @test space_type(typeof(u)) === typeof(W)
     end
 
     @testset "Empty broadcast" begin

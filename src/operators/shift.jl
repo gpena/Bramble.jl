@@ -154,9 +154,9 @@ shift(Ωₕ, Val(3), Val(i))  ==  _Eye(be, n_z, Val(i)) ⊗ backend_eye(be, nₓ
 `i == 0` short-circuits to the identity of the whole grid without building any Kronecker
 product.
 
-It builds the `S₊`/`S₋` matrix forms and the Kronecker oracle
-[`kronecker_operator_matrix`](@ref); the operator families' own matrices come from
-[`stencil_matrix`](@ref).
+It builds the `S₊`/`S₋` matrix forms, and the Kronecker oracle the tests check
+[`stencil_matrix`](@ref) against (`test/space/kronecker_oracle.jl`) calls it; the
+operator families' own matrices come from `stencil_matrix`.
 
 See also: [`⊗`](@ref), [`diff₋ₓ`](@ref).
 """
@@ -167,23 +167,6 @@ function shift(Ωₕ::AbstractMeshType, ::Val{SHIFT_DIM}, ::Val{i}) where {SHIFT
 
     return _recursive_shift(Ωₕ, Val(dim(Ωₕ)), Val(SHIFT_DIM), Val(i))
 end
-
-"""
-    kronecker_operator_matrix(Ωₕ, op)
-
-The Kronecker-product construction [`stencil_matrix`](@ref) replaces in every operator
-family (gpena/Bramble.jl#185): `op` is one of the public per-axis aliases (`D₋ₓ`, `jumpᵧ`,
-`M₂`, ...) and this returns the same matrix built the old way, out of [`shift`](@ref) and
-its combinations (`difference_shift`, `add_half_shift`).
-
-Kept, rather than removed with the rest of the Kronecker construction
-(gpena/Bramble.jl#185), as the oracle [`stencil_matrix`](@ref) is checked against: the
-equality test needs an independent construction, not a deprecated one. Declared here; a
-dispatch method is added next to each family's own implementation (`difference.jl`,
-`average.jl`, `jump.jl`), mapping its public aliases to the `_kron_*` construction that
-family kept.
-"""
-function kronecker_operator_matrix end
 
 # ==============================================================================
 # The index shifts `S₊` and `S₋` (gpena/Bramble.jl#352)
@@ -237,22 +220,13 @@ neighbour gets 0. `nbands == 1` is the whole grid, which is the serial engine.
     return nothing
 end
 
-@noinline function _throw_no_device_shift()
-    throw(
-        ArgumentError(
-        "the index shifts (S₊ₓ, S₊ᵧ, S₊₂, S₋ₓ, S₋ᵧ, S₋₂, S₊ₕ, S₋ₕ) have no device kernel: " *
-        "one is tracked on milestone v4.7.0. Apply them to a host-backed VectorElement.",
-    ),
-    )
-end
-
 # Every CPU policy goes through `_run_bands!` (`vector_calculus.jl`): the single band
 # serially, one band per thread under `CpuThreaded`, one per `@batch` task under
 # `CpuPolyester` through the generic `_batch_run_bands!` hook `BramblePolyesterExt` already
 # fills, so the shifts need no extension hook of their own.
 @inline _shift_engine!(policy::CpuPolicy, out, in_ref, dims, dir, dim_val) = _run_bands!(
     policy, _shift_band!, out, in_ref, dims, dir, dim_val)
-@noinline _shift_engine!(::GpuPolicy, out, in_ref, dims, dir, dim_val) = _throw_no_device_shift()
+@noinline _shift_engine!(::GpuPolicy, out, in_ref, dims, dir, dim_val) = _throw_no_device_kernel(:shift)
 
 # The applicator `@operator_family` calls. A device-backed element on a host policy is
 # refused here too, before the host loop scalar-indexes it; a `GpuPolicy` space reaches
@@ -268,7 +242,7 @@ end
     _check_no_alias(vₕ, uₕ)
     _check_same_grid(vₕ, uₕ)
     (locality(typeof(vₕ.data)) isa DeviceLocality ||
-     locality(typeof(uₕ.data)) isa DeviceLocality) && _throw_no_device_shift()
+     locality(typeof(uₕ.data)) isa DeviceLocality) && _throw_no_device_kernel(:shift)
     dims = _grid_dims(uₕ)
     _check_stencil_dim(DIM, length(dims))
     _shift_engine!(execution_policy(space(uₕ)), vₕ.data, uₕ.data, dims, dir, Val(DIM))

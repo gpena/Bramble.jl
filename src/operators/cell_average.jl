@@ -185,9 +185,6 @@ end
     return _AvgKernel(rule.f, half_points(Ωₕ), indices(Ωₕ), nodes, wts)
 end
 
-@inline _rule_scatter_kernel(rule::CellAverage, sp, ::Val{NC}) where {NC} = _rule_kernel(
-    rule, sp)
-
 @inline _rule_component(rule::CellAverage, k) = CellAverage(pt -> rule.f(pt)[k], rule.nq)
 
 # The value count check (`_check_value_count`) evaluates `f` once, at the first quadrature
@@ -227,9 +224,9 @@ requirement as [`_gpu_for!`](@ref).
 
 # Throws
 - `ErrorException`: no `KernelAbstractions` extension is loaded, so there is no device
-  kernel to reach (`_throw_no_ka_projection_kernel`).
+  kernel to reach (`_throw_no_device_kernel`).
 """
-_launch_cell_average!(v, x, nodes, wts, f, dev, sel) = _throw_no_ka_projection_kernel("_launch_cell_average!")
+_launch_cell_average!(v, x, nodes, wts, f, dev, sel) = _throw_no_device_kernel(:projection, "_launch_cell_average!")
 
 """
     _launch_cell_average_scatter!(mats::Tuple, x::AbstractVector, nodes, wts, f, dev, sel) -> Nothing
@@ -240,10 +237,11 @@ destination tuple `mats`, via a `KernelAbstractions.@kernel` launch on `dev`. Sa
 GPU-compilability requirement on `f`.
 
 # Throws
-- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_device_kernel`).
 """
 function _launch_cell_average_scatter!(mats, x, nodes, wts, f, dev, sel)
-    _throw_no_ka_projection_kernel(
+    _throw_no_device_kernel(
+        :projection,
         "_launch_cell_average_scatter!"
     )
 end
@@ -262,10 +260,10 @@ per-axis half-point vectors `x` and the Gauss-Legendre `nodes`/`wts`, via a
 `KernelAbstractions.@kernel` launch on `dev`. Same GPU-compilability requirement on `f`.
 
 # Throws
-- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_device_kernel`).
 """
 function _launch_cell_average_nd!(v, x, idxs, nodes, wts, f, dev, sel)
-    _throw_no_ka_projection_kernel("_launch_cell_average_nd!")
+    _throw_no_device_kernel(:projection, "_launch_cell_average_nd!")
 end
 
 """
@@ -277,10 +275,11 @@ its components into the destination tuple `mats`, via a `KernelAbstractions.@ker
 on `dev`. Same GPU-compilability requirement on `f`.
 
 # Throws
-- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_ka_projection_kernel`).
+- `ErrorException`: no `KernelAbstractions` extension is loaded (`_throw_no_device_kernel`).
 """
 function _launch_cell_average_scatter_nd!(mats, x, idxs, nodes, wts, f, dev, sel)
-    _throw_no_ka_projection_kernel(
+    _throw_no_device_kernel(
+        :projection,
         "_launch_cell_average_scatter_nd!"
     )
 end

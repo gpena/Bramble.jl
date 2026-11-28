@@ -382,7 +382,7 @@ end
 
 # A reaction reads the plain rows the relations replaced, as on a scalar ghost space.
 function reaction(::GhostCompositeBilinearForm, ::GhostCompositeLinearForm, ::VectorElement;
-        marker, dirichlet_components = nothing)
+        marker, components = nothing, dirichlet_components = nothing)
     return _throw_ghost_reaction()  # ghost_contract.jl
 end
 

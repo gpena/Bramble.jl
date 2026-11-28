@@ -31,9 +31,9 @@ constraints (`EvaluatedDomainMarkers`).
 const ConstraintMarkers = Union{DomainMarkers, EvaluatedDomainMarkers}
 
 """
-    dirichlet_constraints(input, [I::CartesianProduct{1}], pairs::Pair...) -> DomainMarkers
+    dirichlet_constraints(input, [I::CartesianProduct{1}], pairs::Pair...) -> DirichletConstraint
 
-Create Dirichlet boundary constraints.
+Create Dirichlet boundary constraints, returned as a `DirichletConstraint` (the public name of the internal `DomainMarkers` type).
 
 Each `pair` is of the form `:label => func`, where `:label` identifies the boundary region and `func` defines the Dirichlet values. If the optional time domain `I` is provided, `func` must be a time-dependent function `func(x, t)`, or a time- and parameter-dependent one `func(x, t, p)` for a value that a [`semidiscretize`](@ref) residual's own `p` should reach; this is checked by arity, since nothing about `func` itself can be evaluated at construction time. The time-dependent pairs given alongside `I` must agree on which of the two shapes they use, and at least one pair must be time-dependent. A pair whose `func` takes `x` alone may stay beside them: it is kept as it is at every `t`, as [`semidiscretize`](@ref) and the `dirichlet` keyword do.
 
@@ -193,7 +193,7 @@ end
 #===========================================================================#
 
 """
-    dirichlet_constraints(X::CartesianProduct, f::Function) -> DomainMarkers
+    dirichlet_constraints(X::CartesianProduct, f::Function) -> DirichletConstraint
 
 Create a single Dirichlet boundary constraint with function `f` under the `:boundary` label.
 """
@@ -206,7 +206,8 @@ Create a single Dirichlet boundary constraint with function `f` under the `:boun
 Internal helper turning every form accepted by the `dirichlet` keyword into the
 `(labels, conditions)` pair `apply_dirichlet_labels!`/`apply_dirichlet_conditions!`
 already take -- unifying the keyword this way adds no second implementation of applying
-constraints to keep in step with the first.
+constraints to keep in step with the first. The labels come back as a `Tuple`, or
+`nothing`, the only two shapes those functions take.
 
 Accepts, in order: `nothing`; a single label `Symbol` (bilinear only -- no values to
 carry); a `Tuple` of label `Symbol`s; a single `label => f` `Pair`; a `Tuple` of such
@@ -369,6 +370,13 @@ end
 # call allocation free: `index_in_marker` hands back the mesh's stored BitVector, and
 # nothing else is built.
 
+# Whether point `i` of a leaf is marked: one mask (a `BitVector`, or the `_MarkerPoints` a
+# face name gives), or a tuple of them, one per label, ORed in turn so no union is built.
+# `reaction` (postprocessing/reaction.jl) hands `_row_marked` such a tuple per leaf.
+@inline _mask_hit(m::Union{BitVector, _MarkerPoints}, i::Int) = @inbounds m[i]
+@inline _mask_hit(::Tuple{}, i::Int) = false
+@inline _mask_hit(ms::Tuple, i::Int) = _mask_hit(first(ms), i) || _mask_hit(Base.tail(ms), i)
+
 # Whether global row `r` falls in any *selected* leaf's marked set. Recursive over the
 # tuple of leaves, so it unrolls to a handful of comparisons. An unselected leaf's own
 # `active` flag short-circuits it without touching its mask.
@@ -378,7 +386,7 @@ end
     mask, offset, n, active = first(entries)
     if active
         i = r - offset
-        (1 <= i <= n) && @inbounds(mask[i]) && return true
+        (1 <= i <= n) && _mask_hit(mask, i) && return true
     end
     return _row_marked(Base.tail(entries), r)
 end

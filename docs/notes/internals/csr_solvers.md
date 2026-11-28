@@ -27,53 +27,40 @@ every symmetry hint, and every keyword `sparse_factorize`/`pde_solve` already su
 `SparseMatrixCSC` therefore works for `SparseMatrixCSR` for free, with no bespoke CSR-native
 factorization code anywhere.
 
-The conversion (`Bramble._csr_to_csc`, `src/solvers/sparse_solvers.jl`) is an O(nnz)
+The conversion (`_csr_to_csc`, `ext/BrambleSparseMatricesCSRExt.jl`) is an O(nnz)
 row-major -> column-major triplet re-layout through `SparseArrays.sparse`, not an O(n²)
 `Matrix(A)` densification -- the same technique `benchmark/backends.jl`'s `_to_csc` already
 uses for its own correctness oracle. It reads `A.rowptr`, `A.colval`, `A.nzval` directly
-(duck-typed field access, not a static `SparseMatrixCSR` import) and rebuilds a fresh
-`SparseMatrixCSC` from those three arrays as a plain `(I, J, V)` triplet.
+and rebuilds a fresh `SparseMatrixCSC` from those three arrays as a plain `(I, J, V)`
+triplet.
 
-### Why the dispatch is reflection-based, not a typed method
+### Why the dispatch is a set of extension methods
 
 `SparseMatricesCSR.jl` is a weak dependency (`Project.toml`'s `[weakdeps]`/`[extensions]`
 entry `BrambleSparseMatricesCSRExt = "SparseMatricesCSR"`), so `SparseMatrixCSR` cannot be
-named as a compile-time type anywhere under `src/` -- Bramble itself never depends on the
-package that defines it, and a source file that tried would fail to load whenever the
-weak dependency isn't present. `pde_solve`'s own `:default` route already reaches an
-optional backend the same way (`Base.get_extension(Bramble, :BrambleAppleAccelerateExt)`),
-so the CSR fallback follows that established pattern instead of adding a new one:
+named as a type anywhere under `src/`. The extension can, so it adds one-line methods on
+`SparseMatrixCSR` that convert and call the `SparseMatrixCSC` method again:
 
-```julia
-_csr_extension() = Base.get_extension(Bramble, :BrambleSparseMatricesCSRExt)
+- `Bramble.pde_solve`, `Bramble.sparse_factorize`, `Bramble.refactor!` and
+  `Bramble.accelerate_factorize`;
+- `Bramble._as_csc`, which the `BilinearForm` methods of every backend solver apply to the
+  assembled matrix, and `Bramble._rank_one_sparse`, which `pde_solve(::RankOneUpdate, F)`
+  applies to `K.A`.
 
-function _is_csr(A)
-    ext = _csr_extension()
-    return ext !== nothing && A isa ext.SparseMatrixCSR
-end
-```
+Julia picks them by dispatch, so a solve pays no runtime probe for the extension. An
+earlier version asked `Base.get_extension` on every form solve and compared the type by
+reflection; that is gone, with the `_csr_extension` and `_is_csr` helpers.
 
-When `ext/BrambleSparseMatricesCSRExt.jl` is loaded (i.e. the caller has done
-`using SparseMatricesCSR`), that extension module's own
-`using SparseMatricesCSR: SparseMatricesCSR, SparseMatrixCSR, sparsecsr` leaves
-`SparseMatrixCSR` bound as a name on the extension module object itself, reachable by
-reflection (`ext.SparseMatrixCSR`) without Bramble ever importing it. This keeps the new
-dispatch for the direct solvers entirely inside the three files the CSR-solver work owns
-(`src/solvers/sparse_solvers.jl`, `src/solvers/pde_solve.jl`,
-`test/ext/sparse_csr_ext.jl`) rather than requiring a change to
-`ext/BrambleSparseMatricesCSRExt.jl`, which covered construction and assembly. The ODE
-handoff below is the one place the extension itself reaches into solving.
+In `src/`, `_as_csc(A) = A` sits beside the `Matrix` method, and the catch-all
+`sparse_factorize(::AbstractMatrix)` and `pde_solve(::AbstractMatrix, F)` methods are gone.
+A dense `Matrix` therefore raises a plain `MethodError` from both, with the extension
+loaded or not, and `refactor!`'s `Factorization, A::Any` fallback still throws an
+`ArgumentError` naming `SparseMatrixCSC`.
 
-`sparse_factorize`'s existing catch-all (`A::AbstractMatrix`) already threw `MethodError`
-for anything that isn't `SparseMatrixCSC`, deliberately, to keep
-`test/form/sparse_solvers.jl`'s "Type safety: sparse_factorize only accepts SparseMatrixCSC"
-guarantee for genuinely unsupported types (a dense `Matrix`, say). The CSR fallback
-narrows that catch-all rather than replacing it: `_is_csr(A)` intercepts only a matrix the
-loaded CSR extension itself recognizes, and everything else still falls straight through
-to the same `MethodError`. `pde_solve` gained the equivalent new `AbstractMatrix` method
-(it previously had none beyond `SparseMatrixCSC`) with the same shape, and `refactor!`'s
-existing `Factorization, A::Any` fallback (which threw `ArgumentError` naming
-`SparseMatrixCSC` explicitly) gained the same one-line interception before its throw.
+`accelerate_factorize` needed its own CSR method. Its dense `AbstractMatrix` method
+accepted a raw `SparseMatrixCSR` and factored it with dense `cholesky` or `lu`
+(gpena/Bramble.jl#1047); the CSR method is more specific, so a CSR matrix now reaches
+`libSparse` on macOS and the macOS guard elsewhere.
 
 ### Entry points covered
 
@@ -94,9 +81,8 @@ out-of-place and in-place forms, the `VectorElement` destination overload, a com
 right-hand side, every route to a numeric refactorization, and rejection of a dense
 matrix) against a CSR-built Poisson system -- the same contract every other solver
 extension (SuiteSparse, MUMPS, Apple Accelerate, Sparspak) is tested against. A further
-testset confirms the catch-all's guarantee for a genuinely unsupported type (dense
-`Matrix`) is unweakened: loading the CSR extension only ever widens dispatch for a
-`SparseMatrixCSR`, never for anything else.
+testset confirms a dense `Matrix` still raises a `MethodError` from `sparse_factorize` and
+`pde_solve`, and another runs `accelerate_factorize` on a raw CSR matrix.
 
 `poisson_solve_contract` (the other shared contract) is not reused directly: its `solve`/
 `solve_form` closures are exercised against the systems `SolverContracts.poisson_system`
@@ -116,7 +102,7 @@ on an unpreconditioned GMRES or a dense `Matrix` Jacobian, O(n²) per step.
 
 So `_ode_function` passes the prototype and the mass matrix through an internal
 `Bramble._ode_storage(A)` (`src/problems/semidiscrete.jl`), the identity for every matrix
-but a `SparseMatrixCSR`, for which the extension returns `Bramble._csr_to_csc(A)`. Both are
+but a `SparseMatrixCSR`, for which the extension returns `_csr_to_csc(A)`. Both are
 converted: a CSC prototype with a CSR mass matrix still forces O(n²) time. A caller's own
 CSR `jac_prototype` is converted the same way, so `f.jac_prototype !== proto` on CSR, and
 `jacobian = nothing` runs sparse automatic differentiation from the CSC pattern.

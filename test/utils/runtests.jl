@@ -3,7 +3,6 @@
 isdefined(Main, :TestUtils) || include(joinpath(@__DIR__, "..", "TestUtils.jl"))
 
 @testset "Utilities" begin
-    include("macros.jl")
     include("backends.jl")
     include("linear_algebra.jl")
     include("threaded_dot.jl")

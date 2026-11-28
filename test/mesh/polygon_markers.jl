@@ -210,9 +210,9 @@ marker_triple(Ωₕ, L) = map(l -> Bramble.markers(Ωₕ)[l], Bramble._region_ma
     @testset "Domain accessors" begin
         P = Bramble.polygon(V)
         Ω = domain(X, :a => :left, :P => P)
-        ids = Bramble.marker_identifiers(Ω)
-        @test length(ids) == length(markers(Ω)) == 2
-        @test ids[1] === :left && ids[2] === P
+        @test length(markers(Ω)) == 2
+        @test Bramble.identifier(only(Bramble.symbols(Ω))) === :left
+        @test Bramble.identifier(only(Bramble.regions(markers(Ω)))) === P
         @test labels(Ω) == (:a, :P, :P_boundary, :P_exterior)
         @test_allocs labels(Ω)
         text = sprint(show, MIME"text/plain"(), Ω)
