@@ -90,7 +90,9 @@ end
 _jf_coefficient(k::Int, x) = _throw_jf_declaration(k, x)
 
 # What `_dterm` carries down the walk: the declared coefficients, which of them were
-# reached, and one refill per `GridFunctionScale` reading one of them.
+# reached, and one refill per `GridFunctionScale` reading one of them. Build-time only:
+# `refills` is a `Vector{Any}` because each refill has its own type, and `jacobian_form`
+# turns it into a `Tuple` before anything runs it.
 struct _JFWalk{C, S}
     coefficients::C
     space::S

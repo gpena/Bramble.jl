@@ -386,21 +386,18 @@ end
 # `VectorElement` iterate -- as the thing a fresh element type is ever reached through: the
 # only way a `Semidiscretization`'s operator becomes `T`-typed is a Rosenbrock stepper
 # differentiating its right-hand side through `t` (see `TypeCachedOperator`'s docstring).
+# The entry is the same `_TypeCachedEntry`, so the fill crosses the same barrier.
 function _fetch_or_build!(op::TypeCachedOperator, ::Type{T}, t) where {T}
-    a, refill!, A = if haskey(op.cache, T)
-        op.cache[T]
-    else
-        a, refill! = op.build(t)
-        # Populated before the pattern walk, not after -- same reason `type_cached_assemble!`
-        # does: a coefficient buffer built `undef` and read before `refill!` ever ran throws
-        # inside `allocate_system_matrix` for a non-`isbits` `T`.
-        refill!(t)
-        entry = (a, refill!, allocate_system_matrix(a))
-        op.cache[T] = entry
-        entry
-    end
+    found = get(op.cache, T, nothing)
+    found === nothing || return found::_TypeCachedEntry
+    a, refill! = op.build(t)
+    # Populated before the pattern walk, not after -- same reason `type_cached_assemble!`
+    # does: a coefficient buffer built `undef` and read before `refill!` ever ran throws
+    # inside `allocate_system_matrix` for a non-`isbits` `T`.
     refill!(t)
-    return a, A
+    entry = _TypeCachedEntry(a, refill!, allocate_system_matrix(a), nothing)
+    op.cache[T] = entry
+    return entry
 end
 
 @inline _default_mass_form(sp) = form(sp, sp, (u, v) -> innerₕ(u, v))
@@ -785,13 +782,22 @@ end
 
 # A fresh matrix, of whichever element type `x` and `t` are running at, fetched from (or
 # added to) `op`'s cache. Its entries are untyped, so this path dispatches at run time; the
-# barrier keeps that out of the typed path above.
+# barrier keeps that out of the typed path above. As in `type_cached_assemble!`, the
+# arguments cross in a typed `Ref` kept on the entry, so the one dynamic call boxes nothing.
 @noinline function _reassemble_cached!(
         op::TypeCachedOperator, ::Type{T}, sd::Semidiscretization, t
 ) where {T}
-    a, A = _fetch_or_build!(op, T, t)
-    assemble!(A, a; dirichlet = sd.labels, dirichlet_components = sd.components)
-    return A
+    entry = _fetch_or_build!(op, T, t)
+    args = (t, sd.labels, sd.components)
+    slot = entry.args
+    if slot isa Base.RefValue{typeof(args)}
+        slot[] = args
+    else
+        slot = Ref(args)
+        entry.args = slot
+    end
+    Base.inferencebarrier(_type_cached_fill!)(entry.a, entry.refill!, entry.A, slot)
+    return entry.A
 end
 
 # --- The Jacobian ------------------------------------------------------------------- #
