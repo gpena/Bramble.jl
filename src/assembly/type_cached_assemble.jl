@@ -80,6 +80,12 @@ arguments as the call before, it allocates nothing beyond what those two do: wit
 `build` above, 0 bytes. The entry holds on to the last `uₕ` and Dirichlet arguments,
 which stay reachable while `cache` is.
 
+The returned matrix comes out of `cache`, so its type infers as `Any`; only the form `build`
+returns decides it. A caller that uses the matrix in more than one call should assert its
+type first, or each of those calls dispatches at run time. On a CPU backend it is a
+`SparseMatrixCSC{S, Int}`, `S` the form's element type: `Float64` for a `Float32` `uₕ` on a
+`Float64` mesh, the `Dual` itself for a `ForwardDiff.Dual` one.
+
 Not thread-safe. `cache` is a bare `Dict` with no lock, one per residual. Assembling from
 more than one task needs a lock or one cache per task.
 """
