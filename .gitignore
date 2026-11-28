@@ -147,8 +147,6 @@ STANDARDS.md
 # and machine-specific; there is nothing to share.
 check_*_check_*
 
-# graphify (code knowledge graph for Claude): generated per machine by `graphify update .`.
-graphify-out/
 # v4.2.0 AD backend evaluation (gpena/Bramble.jl#369)
 !benchmark/ad_backend_evaluation.jl
 # v4.2.0 DI against direct AD calls (gpena/Bramble.jl#1117)
